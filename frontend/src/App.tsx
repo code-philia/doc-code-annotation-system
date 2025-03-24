@@ -1,0 +1,445 @@
+import React, { useState, useEffect } from 'react';
+import { Layout, Button, Space, message, Upload, Flex, Modal } from 'antd';
+import { PlusOutlined, SaveOutlined, RobotOutlined, DownloadOutlined, QuestionOutlined } from '@ant-design/icons';
+import DocumentPanel from './components/DocumentPanel';
+import CodePanel from './components/CodePanel';
+import AnnotationPanel from './components/AnnotationPanel';
+import { Annotation, Range } from './types';
+import * as api from './services/api';
+import './App.css';
+import type { UploadProps } from 'antd';
+
+const { Sider, Content } = Layout;
+
+interface HistoryState {
+  annotations: Annotation[];
+  currentAnnotation: Annotation | null;
+}
+
+const App: React.FC = () => {
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [currentAnnotation, setCurrentAnnotation] = useState<Annotation | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // 历史记录状态
+  const [history, setHistory] = useState<HistoryState[]>([]);
+  const [currentHistoryIndex, setCurrentHistoryIndex] = useState(-1);
+  
+  const [isHelpModalShown, setIsHelpModalShown] = useState(false);
+
+  // 添加新的历史记录
+  const addToHistory = (newState: HistoryState) => {
+    const newHistory = history.slice(0, currentHistoryIndex + 1);
+    newHistory.push(newState);
+    setHistory(newHistory);
+    setCurrentHistoryIndex(newHistory.length - 1);
+  };
+
+  // 更新标注时同时更新历史记录
+  const updateAnnotations = (newAnnotations: Annotation[], newCurrentAnnotation: Annotation | null = currentAnnotation) => {
+    setAnnotations(newAnnotations);
+    setCurrentAnnotation(newCurrentAnnotation);
+    addToHistory({
+      annotations: newAnnotations,
+      currentAnnotation: newCurrentAnnotation
+    });
+  };
+
+  // 撤销
+  const handleUndo = () => {
+    if (currentHistoryIndex > 0) {
+      const newIndex = currentHistoryIndex - 1;
+      const previousState = history[newIndex];
+      setCurrentHistoryIndex(newIndex);
+      setAnnotations(previousState.annotations);
+      setCurrentAnnotation(previousState.currentAnnotation);
+    }
+  };
+
+  // 重做
+  const handleRedo = () => {
+    if (currentHistoryIndex < history.length - 1) {
+      const newIndex = currentHistoryIndex + 1;
+      const nextState = history[newIndex];
+      setCurrentHistoryIndex(newIndex);
+      setAnnotations(nextState.annotations);
+      setCurrentAnnotation(nextState.currentAnnotation);
+    }
+  };
+
+  // 删除标注
+  const handleDeleteAnnotation = (annotationId: string) => {
+    const newAnnotations = annotations.filter(a => a.id !== annotationId);
+    const newCurrentAnnotation = currentAnnotation?.id === annotationId ? null : currentAnnotation;
+    updateAnnotations(newAnnotations, newCurrentAnnotation);
+    message.success('标注已删除');
+  };
+
+  // 初始化历史记录
+  useEffect(() => {
+    if (history.length === 0) {
+      addToHistory({
+        annotations: annotations,
+        currentAnnotation: currentAnnotation
+      });
+    }
+  }, []);
+
+  // 添加键盘快捷键监听
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === 'z') {
+        e.preventDefault();
+        handleUndo();
+      } else if (e.ctrlKey && e.key === 'y') {
+        e.preventDefault();
+        handleRedo();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [currentHistoryIndex, history]);
+
+  const handleCreateAnnotation = async (category: string) => {
+    const newAnnotation = {
+      id: String(annotations.length + 1),
+      category: category,
+      ranges: [],
+      documentRanges: [],
+      codeRanges: [],
+      updateTime: new Date().toISOString(),
+    };
+    
+    let updateAnnotation = [newAnnotation, ...annotations];
+    setAnnotations(updateAnnotation);
+    setCurrentAnnotation(newAnnotation);
+    return newAnnotation.id;
+  };
+
+  // 检查范围是否重叠
+  const isRangeOverlap = (range1: Range, range2: Range): boolean => {
+    // 如果是不同文档的范围，不算重叠
+    if (range1.documentId !== range2.documentId) {
+      return false;
+    }
+    return !(range1.end <= range2.start || range1.start >= range2.end);
+  };
+
+  // 检查新范围是否与现有范围重叠
+  const hasOverlappingRange = (range: Range, existingRanges: Range[]): boolean => {
+    return existingRanges.some(existing => isRangeOverlap(range, existing));
+  };
+
+  const handleAddToAnnotation = async (range: Range, type: 'document' | 'code', createNew = false) => {
+    let annotation = currentAnnotation;
+    let _annotations = annotations;
+    
+    if (!annotation || createNew) {
+      // 如果没有选中的标注项，自动创建一个新的
+      const newId = String(annotations.length + 1);
+
+      const newAnnotation = {
+        id: String(annotations.length + 1),
+        category: '未命名',
+        ranges: [],
+        documentRanges: [],
+        codeRanges: [],
+        updateTime: new Date().toISOString(),
+      };
+      
+      _annotations = [newAnnotation, ...annotations];
+
+      annotation = _annotations.find(a => a.id === newId) || null;
+      if (!annotation) {
+        message.error('创建标注失败');
+        return;
+      }
+    }
+
+    // 检查是否与当前标注的范围重叠
+    const existingRanges = type === 'document' 
+      ? annotation.documentRanges 
+      : annotation.codeRanges;
+
+    if (hasOverlappingRange(range, existingRanges)) {
+      message.warning('该范围与现有标注重叠，请选择其他范围');
+      return;
+    }
+
+    // 检查是否与其他标注的范围重叠
+    const hasOverlapWithOther = _annotations.some(a => {
+      if (a.id === annotation?.id) return false;
+      const ranges = type === 'document' ? a.documentRanges : a.codeRanges;
+      return hasOverlappingRange(range, ranges);
+    });
+
+    if (hasOverlapWithOther) {
+      message.warning('该范围与其他标注重叠，请选择其他范围');
+      return;
+    }
+
+    const newAnnotations = _annotations.map(a => {
+      if (a.id === annotation?.id) {
+        return {
+          ...a,
+          documentRanges: type === 'document' 
+            ? [...a.documentRanges, range]
+            : a.documentRanges,
+          codeRanges: type === 'code'
+            ? [...a.codeRanges, range]
+            : a.codeRanges,
+          updateTime: new Date().toISOString(),
+        };
+      }
+      return a;
+    });
+
+    const newCurrentAnnotation = {
+      ...annotation,
+      documentRanges: type === 'document' 
+        ? [...annotation.documentRanges, range]
+        : annotation.documentRanges,
+      codeRanges: type === 'code'
+        ? [...annotation.codeRanges, range]
+        : annotation.codeRanges,
+      updateTime: new Date().toISOString(),
+    };
+
+    setAnnotations(newAnnotations);
+    setCurrentAnnotation(newCurrentAnnotation);
+
+    // 添加到历史记录
+    addToHistory({
+      annotations: newAnnotations,
+      currentAnnotation: newCurrentAnnotation
+    });
+
+    message.success('添加标注内容成功');
+  };
+
+  const handleRemoveAnnotationRange = (range: Range, type: 'document' | 'code') => {
+    if (!currentAnnotation) {
+      message.warning('请先选择一个标注项');
+      return;
+    }
+
+    const newAnnotations = annotations.map(annotation => {
+      if (annotation.id === currentAnnotation.id) {
+        return {
+          ...annotation,
+          documentRanges: type === 'document'
+            ? annotation.documentRanges.filter(r => 
+                r.start !== range.start || r.end !== range.end
+              )
+            : annotation.documentRanges,
+          codeRanges: type === 'code'
+            ? annotation.codeRanges.filter(r => 
+                r.start !== range.start || r.end !== range.end
+              )
+            : annotation.codeRanges,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return annotation;
+    });
+
+    const newCurrentAnnotation = {
+      ...currentAnnotation,
+      documentRanges: type === 'document'
+        ? currentAnnotation.documentRanges.filter(r => 
+            r.start !== range.start || r.end !== range.end
+          )
+        : currentAnnotation.documentRanges,
+      codeRanges: type === 'code'
+        ? currentAnnotation.codeRanges.filter(r => 
+            r.start !== range.start || r.end !== range.end
+          )
+        : currentAnnotation.codeRanges,
+      updatedAt: new Date().toISOString(),
+    };
+
+    setAnnotations(newAnnotations);
+    setCurrentAnnotation(newCurrentAnnotation);
+
+    // 添加到历史记录
+    addToHistory({
+      annotations: newAnnotations,
+      currentAnnotation: newCurrentAnnotation
+    });
+
+    message.success('取消标注成功');
+  };
+
+  const handleDocumentUpload = (result: { id: string; name: string }) => {
+    message.success(`文档 ${result.name} 上传成功`);
+  };
+
+  const handleCodeUpload = (result: { id: string; name: string }) => {
+    message.success(`代码 ${result.name} 上传成功`);
+  };
+
+  // 加载保存的标注数据
+  useEffect(() => {
+    const savedAnnotations = localStorage.getItem('annotations');
+    if (savedAnnotations) {
+      try {
+        const parsed = JSON.parse(savedAnnotations);
+        setAnnotations(parsed);
+        message.success('已加载保存的标注');
+      } catch (error) {
+        console.error('Failed to load annotations:', error);
+        message.error('加载标注失败');
+      }
+    }
+  }, []);
+
+  // 自动保存标注数据
+  useEffect(() => {
+    if (annotations.length > 0) {
+      try {
+        localStorage.setItem('annotations', JSON.stringify(annotations));
+      } catch (error) {
+        console.error('Failed to save annotations:', error);
+        message.error('保存标注失败');
+      }
+    }
+  }, [annotations]);
+
+  // 手动保存标注数据
+  const handleSaveAnnotations = () => {
+    try {
+      // 创建要保存的数据
+      const data = JSON.stringify(annotations, null, 2);
+      
+      // 创建 Blob 对象
+      const blob = new Blob([data], { type: 'application/json' });
+      
+      // 创建下载链接
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // 设置文件名，使用当前时间戳
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      link.download = `annotations-${timestamp}.json`;
+      
+      // 触发下载
+      document.body.appendChild(link);
+      link.click();
+      
+      // 清理
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      message.success('标注数据已保存到文件');
+    } catch (error) {
+      console.error('Failed to save annotations:', error);
+      message.error('保存标注失败');
+    }
+  };
+
+  // 加载保存的标注数据
+  const handleLoadAnnotations = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const parsed = JSON.parse(content);
+        setAnnotations(parsed);
+        message.success('标注数据加载成功');
+      } catch (error) {
+        console.error('Failed to load annotations:', error);
+        message.error('加载标注数据失败');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const uploadProps: UploadProps = {
+    beforeUpload: (file) => {
+      if (file.type !== 'application/json') {
+        message.error('只能上传 JSON 文件！');
+        return Upload.LIST_IGNORE;
+      }
+      handleLoadAnnotations(file);
+      return false;
+    },
+    showUploadList: false,
+  };
+
+  return (
+    <Layout className="app-layout">
+      <Sider width={64} className="toolbar" theme="light">
+        <Flex style={{ height: "100%" }} vertical={true} justify='space-between'>
+          <Space direction="vertical" size="middle" style={{ width: '100%', padding: '20px 0', alignItems: 'center' }}>
+            <Upload {...uploadProps}>
+              <Button
+                icon={<DownloadOutlined />}
+                title="导入标注"
+              />
+            </Upload>
+            <Button
+              icon={<SaveOutlined />}
+              onClick={handleSaveAnnotations}
+              title="导出标注"
+            />
+            <Button
+              icon={<RobotOutlined />}
+              onClick={() => {}}
+              loading={isLoading}
+              title="AI自动生成标注"
+            />
+          </Space>
+          <Space direction="vertical" size="middle" style={{ width: '100%', padding: '20px 0', alignItems: 'center' }}>
+            <Button
+              icon={<QuestionOutlined />}
+              onClick={() => { setIsHelpModalShown(!isHelpModalShown); }}
+              title="使用指南"
+            />
+          </Space>
+        </Flex>
+      </Sider>
+      
+      <Layout>
+        <Content className="main-content">
+          <DocumentPanel
+            className="panel"
+            onUpload={handleDocumentUpload}
+            onAddToAnnotation={(range, annotationId, createNew) => handleAddToAnnotation(range, 'document', createNew)}
+            onRemoveAnnotationRange={(range) => handleRemoveAnnotationRange(range, 'document')}
+            onCreateAnnotation={() => handleCreateAnnotation('default')}
+            annotations={annotations}
+            currentAnnotation={currentAnnotation}
+          />
+          <CodePanel
+            className="panel"
+            onUpload={handleCodeUpload}
+            onAddToAnnotation={(range, annotationId, createNew) => handleAddToAnnotation(range, 'code', createNew)}
+            onRemoveAnnotationRange={(range) => handleRemoveAnnotationRange(range, 'code')}
+            onCreateAnnotation={() => handleCreateAnnotation('default')}
+            annotations={annotations}
+            currentAnnotation={currentAnnotation}
+          />
+          <AnnotationPanel
+            annotations={annotations}
+            currentAnnotation={currentAnnotation}
+            onAnnotationCreate={handleCreateAnnotation}
+            onAnnotationSelect={setCurrentAnnotation}
+            onAnnotationDelete={handleDeleteAnnotation}
+            className="annotation-panel"
+          />
+        </Content>
+      </Layout>
+      <Modal title="Basic Modal" open={isHelpModalShown} footer={null} onCancel={() => { setIsHelpModalShown(!isHelpModalShown); }} mask={false}>
+        <p>Some contents...</p>
+        <p>Some contents...</p>
+        <p>Some contents...</p>
+      </Modal>
+    </Layout>
+  );
+};
+
+export default App; 
