@@ -206,26 +206,47 @@ const CodePanel: React.FC<CodePanelProps> = ({
   };
 
   // 渲染代码内容，包括高亮
-  const renderCodeContent = (fileId: string, content: string, codeRanges: Range[]) => {
-    // 只显示属于当前文件的标注
-    const currentFileRanges = codeRanges.filter(range => range.documentId === fileId);
+  const renderCodeContent = (fileId: string, content: string, annotations: Annotation[]) => {
+    const inCodeAnnotations: Annotation[] = [];
+    annotations.forEach(a => {
+      const inCodeRanges: Range[] = a.codeRanges.filter(r => r.documentId === fileId);
+      if (inCodeRanges.length > 0) {
+        inCodeAnnotations.push({
+          ...a,
+          codeRanges: inCodeRanges
+        })
+      }
+    });
 
-    if (!currentFileRanges.length) {
-      return <code className="language-python">{content}</code>;
-    }
+    if (inCodeAnnotations.length === 0) return content;
 
     let lastIndex = 0;
     const parts: JSX.Element[] = [];
 
-    // 按照范围的起始位置排序
-    const sortedRanges = [...currentFileRanges].sort((a, b) => a.start - b.start);
+    type tempRangeInfo = {
+      key: string,
+      annotationId: string,
+      color: string,
+      lighterColor: string,
+      range: Range
+    };
+    let sortedRangeInfo: tempRangeInfo[] = inCodeAnnotations.flatMap(a => {
+      return a.codeRanges.map((r, i): tempRangeInfo => ({
+        key: `${a.id}-${i}`,
+        annotationId: a.id,
+        color: a.color ?? '#000000',
+        lighterColor: a.lighterColor ?? 'rgba(103, 103, 103, 0.1)',
+        range: r
+      }));
+    });
+    sortedRangeInfo.sort((a, b) => a.range.start - b.range.start);
 
-    sortedRanges.forEach((range, index) => {
+    sortedRangeInfo.forEach((rangeInfo, index) => {
       // 添加未高亮的代码
-      if (range.start > lastIndex) {
+      if (rangeInfo.range.start > lastIndex) {
         parts.push(
           <code key={`code-${index}`} className="language-python">
-            {content.slice(lastIndex, range.start)}
+            {content.slice(lastIndex, rangeInfo.range.start)}
           </code>
         );
       }
@@ -235,15 +256,19 @@ const CodePanel: React.FC<CodePanelProps> = ({
         <code
           key={`highlight-${index}`}
           className="language-python highlighted-code"
-          onClick={() => onRemoveAnnotationRange?.(range)}
+          onClick={() => onRemoveAnnotationRange?.(rangeInfo.range)}
           title="点击取消标注"
-          style={{ cursor: 'pointer' }}
+          style={{
+            cursor: 'pointer',
+            backgroundColor: rangeInfo.lighterColor,
+            borderBottom: `2px solid ${rangeInfo.color}`
+          }}
         >
-          {content.slice(range.start, range.end)}
+          {content.slice(rangeInfo.range.start, rangeInfo.range.end)}
         </code>
       );
 
-      lastIndex = range.end;
+      lastIndex = rangeInfo.range.end;
     });
 
     // 添加剩余的未高亮代码
@@ -317,7 +342,7 @@ const CodePanel: React.FC<CodePanelProps> = ({
                   {renderCodeContent(
                     file.id,
                     file.content,
-                    annotations.flatMap(a => a.codeRanges)
+                    annotations
                   )}
                 </pre>
               </div>

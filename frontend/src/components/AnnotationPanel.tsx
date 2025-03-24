@@ -1,19 +1,9 @@
 import React, { useState } from 'react';
-import { Card, Button, Input, Space, List, Typography, Collapse, Tag, Modal, Form, message, Popconfirm } from 'antd';
+import { Card, Button, Input, List, Modal, Form, message, Popconfirm } from 'antd';
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import classNames from 'classnames';
-import { Annotation, Range } from '../types';
-
-const { Text } = Typography;
-const { Panel } = Collapse;
-
-interface AnnotationItem {
-  id: string;
-  name: string;
-  isSelected: boolean;
-  documentRanges: Array<{ start: number; end: number; }>;
-  codeRanges: Array<{ start: number; end: number; }>;
-}
+import { Annotation } from '../types';
+import { computeLighterColor } from './utils';
 
 interface AnnotationPanelProps {
   className?: string;
@@ -22,19 +12,24 @@ interface AnnotationPanelProps {
   onAnnotationCreate?: (category: string) => void;
   onAnnotationSelect?: (annotation: Annotation) => void;
   onAnnotationDelete?: (annotationId: string) => void;
+  onAnnotationRename?: (annotationId: string, annotationName: string) => void;
 }
 
-const AnnotationItem = ({ 
-  annotation, 
-  selected, 
+const AnnotationItem = ({
+  annotation,
+  selected,
   onClick,
-  onDelete 
-}: { 
-  annotation: Annotation; 
-  selected: boolean; 
+  onDelete,
+  onChangeName
+}: {
+  annotation: Annotation;
+  selected: boolean;
   onClick: () => void;
   onDelete: () => void;
+  onChangeName: (name: string) => void;
 }) => {
+  const [isNameBeingEdited, setIsNameBeingEdited] = useState(false);
+
   const handleDelete = (e?: React.MouseEvent<HTMLElement, MouseEvent> | undefined) => {
     if (e) {
       e.stopPropagation();
@@ -43,9 +38,46 @@ const AnnotationItem = ({
   };
 
   return (
-    <div className={`annotation-item ${selected ? 'selected' : ''}`} onClick={onClick}>
+    <div
+      className={`annotation-item ${selected ? 'selected' : ''}`}
+      onClick={onClick}
+      style={{
+        outlineColor: annotation.color ?? '#000000',
+        backgroundColor: annotation.color ? computeLighterColor(annotation.color) : computeLighterColor('#000000'),
+        outlineWidth: selected ? '2px' : '1px',
+        outlineStyle: 'solid'
+      }}
+    >
       <div className="annotation-header">
-        <div className="category">{annotation.category}</div>
+        {
+          isNameBeingEdited
+            ? (
+              <form
+                onBlur={() => setIsNameBeingEdited(false)}
+              >
+                <input
+                  className="category"
+                  title={annotation.category}
+                  style={{
+                    color: annotation.color ?? '#000000'
+                  }}
+                  value={annotation.category}
+                />
+              </form>
+            )
+            : (
+              <div
+                className="category"
+
+                title={annotation.category}
+                style={{
+                  color: annotation.color ?? '#000000'
+                }}
+              >
+                {limitNameLength(annotation.category)}
+              </div>
+            )
+        }
         <div className="stats">
           <div className="stat-tag">文档片段: {annotation.documentRanges.length}</div>
           <div className="stat-tag">代码片段: {annotation.codeRanges.length}</div>
@@ -76,8 +108,8 @@ const AnnotationItem = ({
             cancelText="取消"
             placement="topRight"
           >
-            <Button 
-              type="text" 
+            <Button
+              type="text"
               className="delete-btn"
               onClick={(e) => e.stopPropagation()}
               icon={<DeleteOutlined />}
@@ -98,6 +130,7 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
   onAnnotationCreate,
   onAnnotationSelect,
   onAnnotationDelete,
+  onAnnotationRename
 }) => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [form] = Form.useForm();
@@ -152,6 +185,7 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
                 selected={currentAnnotation?.id === annotation.id}
                 onClick={() => onAnnotationSelect?.(annotation)}
                 onDelete={() => onAnnotationDelete?.(annotation.id)}
+                onChangeName={(name) => onAnnotationRename?.(annotation.id, name)}
               />
             </List.Item>
           )}
@@ -178,4 +212,12 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
   );
 };
 
-export default AnnotationPanel; 
+export default AnnotationPanel;
+
+function limitNameLength(name: string, limit: number = 8) {
+  if (name.length <= limit) {
+    return name;
+  }
+
+  return name.slice(0, limit - 2) + '...';
+}

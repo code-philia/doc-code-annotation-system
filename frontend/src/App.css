@@ -211,29 +211,15 @@ body {
 
 /* 高亮样式 */
 .highlighted-text {
-  background: rgba(255, 207, 0, 0.2);
-  border-bottom: 2px solid #ffc107;
-  padding: 2px 0;
   transition: all 0.3s;
   cursor: pointer;
-}
-
-.highlighted-text:hover {
-  background: rgba(255, 207, 0, 0.3);
-  border-bottom-color: #ffb300;
+  background-clip: padding-box;
 }
 
 .highlighted-code {
-  background: rgba(103, 58, 183, 0.1);
-  border-bottom: 2px solid #673ab7;
-  padding: 2px 0;
   transition: all 0.3s;
   cursor: pointer;
-}
-
-.highlighted-code:hover {
-  background: rgba(103, 58, 183, 0.15);
-  border-bottom-color: #5e35b1;
+  background-clip: padding-box;
 }
 
 /* 悬浮工具栏样式 */
@@ -300,10 +286,10 @@ body {
 /* 标注面板样式 */
 .annotation-item {
   padding: 12px 16px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   border-radius: 6px;
   background: #f8f9fa;
-  border: 1px solid #e9ecef;
+  /* border: 1px solid #e9ecef; */
   transition: all 0.2s ease;
   cursor: pointer;
   width: 100%;
@@ -346,21 +332,10 @@ body {
   font-size: 12px;
   padding: 2px 10px;
   border-radius: 12px;
-  background: rgba(22, 119, 255, 0.1);
-  color: #1677ff;
+
   display: flex;
   align-items: center;
   white-space: nowrap;
-}
-
-.annotation-item .stat-tag:nth-child(1) {
-  background: rgba(82, 196, 26, 0.1);
-  color: #52c41a;
-}
-
-.annotation-item .stat-tag:nth-child(2) {
-  background: rgba(250, 173, 20, 0.1);
-  color: #faad14;
 }
 
 .annotation-item .range-preview {
@@ -458,4 +433,4 @@ body {
     opacity: 1;
     transform: translateY(0);
   }
-} 
+}

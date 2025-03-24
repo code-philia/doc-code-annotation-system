@@ -3,11 +3,11 @@ import { Card, Button, Upload, message, Divider } from 'antd';
 import { DownloadOutlined, DownOutlined, RightOutlined, PlusOutlined, CloseOutlined } from '@ant-design/icons';
 import type { UploadFile } from 'antd/es/upload/interface';
 import classNames from 'classnames';
-import { DocumentItem, Range, Annotation } from '../types';
+import { DocumentationItem, Range, Annotation } from '../types';
 import * as api from '../services/api';
 import { getCaretCharacterOffsetWithin } from './utils';
 
-interface DocumentPanelProps {
+interface DocumentationPanelProps {
   className?: string;
   onUpload?: (result: { id: string; name: string }) => void;
   onAddToAnnotation?: (range: Range, annotationId: string, createNew?: boolean) => void;
@@ -17,7 +17,7 @@ interface DocumentPanelProps {
   currentAnnotation?: Annotation | null;
 }
 
-const DocumentPanel: React.FC<DocumentPanelProps> = ({
+const DocumentationPanel: React.FC<DocumentationPanelProps> = ({
   className,
   onUpload,
   onAddToAnnotation,
@@ -26,7 +26,7 @@ const DocumentPanel: React.FC<DocumentPanelProps> = ({
   annotations,
   currentAnnotation
 }) => {
-  const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [documents, setDocuments] = useState<DocumentationItem[]>([]);
   const [selectedRange, setSelectedRange] = useState<Range | null>(null);
   const [toolbarPosition, setToolbarPosition] = useState<{ top: number; left: number } | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -55,9 +55,9 @@ const DocumentPanel: React.FC<DocumentPanelProps> = ({
 
       // 上传到服务器
       const result = await api.uploadDocument(file);
-      
+
       // 更新本地状态
-      const newDoc: DocumentItem = {
+      const newDoc: DocumentationItem = {
         id: result.id,
         name: file.name,
         content,
@@ -91,7 +91,7 @@ const DocumentPanel: React.FC<DocumentPanelProps> = ({
 
     const range = selection.getRangeAt(0);
     const rect = range.getBoundingClientRect();
-    
+
     // 计算工具栏位置，确保不会超出视口
     const toolbarTop = rect.top - 40; // 工具栏高度 + 间距
     const toolbarLeft = rect.left + (rect.width / 2);
@@ -163,42 +163,69 @@ const DocumentPanel: React.FC<DocumentPanelProps> = ({
   };
 
   // 渲染文档内容，包括高亮
-  const renderDocumentContent = (documentId: string, content: string, documentRanges: Range[]) => {
-    // 只显示属于当前文档的标注
-    const currentDocumentRanges = documentRanges.filter(range => range.documentId === documentId);
-    
-    if (!currentDocumentRanges.length) return content;
+  const renderDocumentationContent = (documentId: string, content: string, annotations: Annotation[]) => {
+    const inDocumentationAnnotations: Annotation[] = [];
+    annotations.forEach(a => {
+      const inDocumentationRanges: Range[] = a.documentRanges.filter(r => r.documentId === documentId);
+      if (inDocumentationRanges.length > 0) {
+        inDocumentationAnnotations.push({
+          ...a,
+          codeRanges: inDocumentationRanges
+        })
+      }
+    });
+
+    if (inDocumentationAnnotations.length === 0) return content;
 
     let lastIndex = 0;
     const parts: JSX.Element[] = [];
-    
-    // 按照范围的起始位置排序
-    const sortedRanges = [...currentDocumentRanges].sort((a, b) => a.start - b.start);
 
-    sortedRanges.forEach((range, index) => {
+    type tempRangeInfo = {
+      key: string,
+      annotationId: string,
+      color: string,
+      lighterColor: string,
+      range: Range
+    };
+    let sortedRangeInfo: tempRangeInfo[] = inDocumentationAnnotations.flatMap(a => {
+      return a.codeRanges.map((r, i): tempRangeInfo => ({
+        key: `${a.id}-${i}`,
+        annotationId: a.id,
+        color: a.color ?? '#000000',
+        lighterColor: a.lighterColor ?? 'rgba(103, 103, 103, 0.1)',
+        range: r
+      }));
+    });
+    sortedRangeInfo.sort((a, b) => a.range.start - b.range.start);
+
+    sortedRangeInfo.forEach((rangeInfo, index) => {
       // 添加未高亮的文本
-      if (range.start > lastIndex) {
+      if (rangeInfo.range.start > lastIndex) {
         parts.push(
           <span key={`text-${index}`}>
-            {content.slice(lastIndex, range.start)}
+            {content.slice(lastIndex, rangeInfo.range.start)}
           </span>
         );
       }
 
       // 添加高亮的文本，支持点击取消标注
       parts.push(
-        <span 
-          key={`highlight-${index}`} 
+        <span
+          key={`highlight-${rangeInfo.key}`}
           className="highlighted-text"
-          onClick={() => onRemoveAnnotationRange?.(range)}
+          onClick={() => onRemoveAnnotationRange?.(rangeInfo.range)}
           title="点击取消标注"
-          style={{ cursor: 'pointer' }}
+          style={{
+            cursor: 'pointer',
+            backgroundColor: rangeInfo.lighterColor,
+            borderBottom: `2px solid ${rangeInfo.color}`
+          }}
         >
-          {content.slice(range.start, range.end)}
+          {content.slice(rangeInfo.range.start, rangeInfo.range.end)}
         </span>
       );
 
-      lastIndex = range.end;
+      lastIndex = rangeInfo.range.end;
     });
 
     // 添加剩余的未高亮文本
@@ -256,15 +283,15 @@ const DocumentPanel: React.FC<DocumentPanelProps> = ({
               {doc.name}
             </Button>
             {doc.isExpanded && (
-              <div 
+              <div
                 className="document-content"
                 onMouseDown={handleMouseDown}
                 onMouseUp={() => handleTextSelection(doc.id)}
               >
-                {renderDocumentContent(
+                {renderDocumentationContent(
                   doc.id,
                   doc.content,
-                  annotations.flatMap(a => a.documentRanges)
+                  annotations
                 )}
               </div>
             )}
@@ -312,4 +339,4 @@ const DocumentPanel: React.FC<DocumentPanelProps> = ({
   );
 };
 
-export default DocumentPanel; 
+export default DocumentationPanel;

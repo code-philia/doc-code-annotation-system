@@ -17,9 +17,12 @@ export interface Annotation {
   documentRanges: Range[];
   codeRanges: Range[];
   updateTime: string;
+  /** Displayed Color, in CSS Hex format, either starting with '#' or not */
+  color?: string;
+  lighterColor?: string;
 }
 
-export interface DocumentItem {
+export interface DocumentationItem {
   id: string;
   name: string;
   /** Content of the document. All line breaks should be converted to \n to match `range.toString()` in HTML interface. */
@@ -33,4 +36,4 @@ export interface CodeItem {
   /** Content of the code. All line breaks should be converted to \n to match `range.toString()` in HTML interface. */
   content: string;
   isExpanded: boolean;
-} 
+}

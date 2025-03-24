@@ -13,6 +13,7 @@
     "axios": "^1.8.4",
     "buffer": "^6.0.3",
     "classnames": "^2.3.1",
+    "color-convert": "^3.0.1",
     "https-browserify": "^1.0.0",
     "prismjs": "^1.29.0",
     "process": "^0.11.10",

@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Layout, Button, Space, message, Upload, Flex, Modal } from 'antd';
-import { PlusOutlined, SaveOutlined, RobotOutlined, DownloadOutlined, QuestionOutlined } from '@ant-design/icons';
-import DocumentPanel from './components/DocumentPanel';
+import { SaveOutlined, RobotOutlined, DownloadOutlined, QuestionOutlined } from '@ant-design/icons';
+import DocumentationPanel from './components/DocumentPanel';
 import CodePanel from './components/CodePanel';
 import AnnotationPanel from './components/AnnotationPanel';
 import { Annotation, Range } from './types';
-import * as api from './services/api';
 import './App.css';
 import type { UploadProps } from 'antd';
+import { computeLighterColor, getRandomColor } from 'components/utils';
 
 const { Sider, Content } = Layout;
 
@@ -20,12 +20,18 @@ const App: React.FC = () => {
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [currentAnnotation, setCurrentAnnotation] = useState<Annotation | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  
+
   // 历史记录状态
   const [history, setHistory] = useState<HistoryState[]>([]);
   const [currentHistoryIndex, setCurrentHistoryIndex] = useState(-1);
-  
+
   const [isHelpModalShown, setIsHelpModalShown] = useState(false);
+
+  const getExistingColorIterable = function* () {
+    for (const a of annotations) {
+      yield a.color ?? '#FFFFFF';
+    }
+  }
 
   // 添加新的历史记录
   const addToHistory = (newState: HistoryState) => {
@@ -75,6 +81,16 @@ const App: React.FC = () => {
     message.success('标注已删除');
   };
 
+  const handleRenameAnnotation = (annotationId: string, name: string) => {
+    const updatedAnnotations = [...annotations]
+    const matchedAnnotation = updatedAnnotations.find(a => a.id === annotationId);
+    if (matchedAnnotation) {
+      matchedAnnotation.category = name;
+    }
+
+    setAnnotations(updatedAnnotations);
+  }
+
   // 初始化历史记录
   useEffect(() => {
     if (history.length === 0) {
@@ -104,15 +120,19 @@ const App: React.FC = () => {
   }, [currentHistoryIndex, history]);
 
   const handleCreateAnnotation = async (category: string) => {
-    const newAnnotation = {
+    const newColor = getRandomColor(getExistingColorIterable);
+    const newLighterColor = computeLighterColor(newColor);
+
+    const newAnnotation: Annotation = {
       id: String(annotations.length + 1),
       category: category,
-      ranges: [],
       documentRanges: [],
       codeRanges: [],
-      updateTime: new Date().toISOString(),
+      updateTime: newColor,
+      color: newColor,
+      lighterColor: newLighterColor
     };
-    
+
     let updateAnnotation = [newAnnotation, ...annotations];
     setAnnotations(updateAnnotation);
     setCurrentAnnotation(newAnnotation);
@@ -133,23 +153,31 @@ const App: React.FC = () => {
     return existingRanges.some(existing => isRangeOverlap(range, existing));
   };
 
-  const handleAddToAnnotation = async (range: Range, type: 'document' | 'code', createNew = false) => {
-    let annotation = currentAnnotation;
+  const handleAddToAnnotation = async (range: Range, type: 'document' | 'code', id: string | undefined = undefined, createNew = false) => {
+    let selectedAnnotation: Annotation | null = id === undefined ? null : (annotations.find(a => a.id === id) ?? null);
+    if (selectedAnnotation === undefined) {
+      selectedAnnotation = currentAnnotation;
+    }
+
+    let annotation = selectedAnnotation;
     let _annotations = annotations;
-    
+
     if (!annotation || createNew) {
       // 如果没有选中的标注项，自动创建一个新的
       const newId = String(annotations.length + 1);
+      const newColor = getRandomColor(getExistingColorIterable);
+      const newLighterColor = computeLighterColor(newColor);
 
-      const newAnnotation = {
+      const newAnnotation: Annotation = {
         id: String(annotations.length + 1),
         category: '未命名',
-        ranges: [],
         documentRanges: [],
         codeRanges: [],
         updateTime: new Date().toISOString(),
+        color: newColor,
+        lighterColor: newLighterColor
       };
-      
+
       _annotations = [newAnnotation, ...annotations];
 
       annotation = _annotations.find(a => a.id === newId) || null;
@@ -160,8 +188,8 @@ const App: React.FC = () => {
     }
 
     // 检查是否与当前标注的范围重叠
-    const existingRanges = type === 'document' 
-      ? annotation.documentRanges 
+    const existingRanges = type === 'document'
+      ? annotation.documentRanges
       : annotation.codeRanges;
 
     if (hasOverlappingRange(range, existingRanges)) {
@@ -185,7 +213,7 @@ const App: React.FC = () => {
       if (a.id === annotation?.id) {
         return {
           ...a,
-          documentRanges: type === 'document' 
+          documentRanges: type === 'document'
             ? [...a.documentRanges, range]
             : a.documentRanges,
           codeRanges: type === 'code'
@@ -199,7 +227,7 @@ const App: React.FC = () => {
 
     const newCurrentAnnotation = {
       ...annotation,
-      documentRanges: type === 'document' 
+      documentRanges: type === 'document'
         ? [...annotation.documentRanges, range]
         : annotation.documentRanges,
       codeRanges: type === 'code'
@@ -231,12 +259,12 @@ const App: React.FC = () => {
         return {
           ...annotation,
           documentRanges: type === 'document'
-            ? annotation.documentRanges.filter(r => 
+            ? annotation.documentRanges.filter(r =>
                 r.start !== range.start || r.end !== range.end
               )
             : annotation.documentRanges,
           codeRanges: type === 'code'
-            ? annotation.codeRanges.filter(r => 
+            ? annotation.codeRanges.filter(r =>
                 r.start !== range.start || r.end !== range.end
               )
             : annotation.codeRanges,
@@ -249,12 +277,12 @@ const App: React.FC = () => {
     const newCurrentAnnotation = {
       ...currentAnnotation,
       documentRanges: type === 'document'
-        ? currentAnnotation.documentRanges.filter(r => 
+        ? currentAnnotation.documentRanges.filter(r =>
             r.start !== range.start || r.end !== range.end
           )
         : currentAnnotation.documentRanges,
       codeRanges: type === 'code'
-        ? currentAnnotation.codeRanges.filter(r => 
+        ? currentAnnotation.codeRanges.filter(r =>
             r.start !== range.start || r.end !== range.end
           )
         : currentAnnotation.codeRanges,
@@ -313,27 +341,27 @@ const App: React.FC = () => {
     try {
       // 创建要保存的数据
       const data = JSON.stringify(annotations, null, 2);
-      
+
       // 创建 Blob 对象
       const blob = new Blob([data], { type: 'application/json' });
-      
+
       // 创建下载链接
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      
+
       // 设置文件名，使用当前时间戳
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       link.download = `annotations-${timestamp}.json`;
-      
+
       // 触发下载
       document.body.appendChild(link);
       link.click();
-      
+
       // 清理
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-      
+
       message.success('标注数据已保存到文件');
     } catch (error) {
       console.error('Failed to save annotations:', error);
@@ -402,13 +430,13 @@ const App: React.FC = () => {
           </Space>
         </Flex>
       </Sider>
-      
+
       <Layout>
         <Content className="main-content">
-          <DocumentPanel
+          <DocumentationPanel
             className="panel"
             onUpload={handleDocumentUpload}
-            onAddToAnnotation={(range, annotationId, createNew) => handleAddToAnnotation(range, 'document', createNew)}
+            onAddToAnnotation={(range, annotationId, createNew) => handleAddToAnnotation(range, 'document', annotationId, createNew)}
             onRemoveAnnotationRange={(range) => handleRemoveAnnotationRange(range, 'document')}
             onCreateAnnotation={() => handleCreateAnnotation('default')}
             annotations={annotations}
@@ -417,7 +445,7 @@ const App: React.FC = () => {
           <CodePanel
             className="panel"
             onUpload={handleCodeUpload}
-            onAddToAnnotation={(range, annotationId, createNew) => handleAddToAnnotation(range, 'code', createNew)}
+            onAddToAnnotation={(range, annotationId, createNew) => handleAddToAnnotation(range, 'code', annotationId, createNew)}
             onRemoveAnnotationRange={(range) => handleRemoveAnnotationRange(range, 'code')}
             onCreateAnnotation={() => handleCreateAnnotation('default')}
             annotations={annotations}
@@ -429,6 +457,7 @@ const App: React.FC = () => {
             onAnnotationCreate={handleCreateAnnotation}
             onAnnotationSelect={setCurrentAnnotation}
             onAnnotationDelete={handleDeleteAnnotation}
+            onAnnotationRename={handleRenameAnnotation}
             className="annotation-panel"
           />
         </Content>
@@ -442,4 +471,4 @@ const App: React.FC = () => {
   );
 };
 
-export default App; 
+export default App;
