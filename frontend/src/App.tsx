@@ -326,13 +326,11 @@ const App: React.FC = () => {
 
   // 自动保存标注数据
   useEffect(() => {
-    if (annotations.length > 0) {
-      try {
-        localStorage.setItem('annotations', JSON.stringify(annotations));
-      } catch (error) {
-        console.error('Failed to save annotations:', error);
-        message.error('保存标注失败');
-      }
+    try {
+      localStorage.setItem('annotations', JSON.stringify(annotations));
+    } catch (error) {
+      console.error('Failed to save annotations:', error);
+      message.error('保存标注失败');
     }
   }, [annotations]);
 
