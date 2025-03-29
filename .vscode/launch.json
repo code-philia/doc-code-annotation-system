@@ -7,14 +7,15 @@
         {
             "type": "chrome",
             "request": "launch",
-            "name": "Launch Chrome against localhost",
+            "name": "Chrome: Web Page Dev",
             "url": "http://localhost:3000",
             "webRoot": "${workspaceFolder}/frontend",
             "sourceMaps": true,
             "outFiles": [
                 "${workspaceFolder}/**/*.(m|c|)js",
                 "!**/node_modules/**"
-            ]
+            ],
+            "preLaunchTask": "NPM Start Dev"
         }
     ]
 }

@@ -4,11 +4,18 @@
 	"version": "2.0.0",
 	"tasks": [
         {
-            "label": "Start Web Page Dev",
+            "label": "NPM Start Dev",
             "type": "npm",
 			"script": "start",
 			"path": "frontend",
-			"problemMatcher": "$tsc-watch",
+			"problemMatcher": {
+                "base": "$tsc-watch",
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": "Starting the development server\\.\\.\\.|Compiling",
+                    "endsPattern": "No issues found."
+                }
+            },
             "isBackground": true,
             "presentation": {
                 "reveal": "never"
