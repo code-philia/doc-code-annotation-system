@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Card, Button, Upload, message, Divider } from 'antd';
-import { DownloadOutlined, DownOutlined, RightOutlined, PlusOutlined, CloseOutlined } from '@ant-design/icons';
+import { DownloadOutlined, CaretDownOutlined, CaretRightOutlined, PlusOutlined, CloseOutlined } from '@ant-design/icons';
 import type { UploadFile } from 'antd/es/upload/interface';
 import classNames from 'classnames';
 import Prism from 'prismjs';
@@ -60,7 +60,7 @@ const CodePanel: React.FC<CodePanelProps> = ({
 
       // 更新本地状态
       const newFile: CodeItem = {
-        id: result.id,
+        id: file.url ?? `url-unknown-file-${result.id}`,
         name: file.name,
         content,
         isExpanded: true,
@@ -261,7 +261,8 @@ const CodePanel: React.FC<CodePanelProps> = ({
           style={{
             cursor: 'pointer',
             backgroundColor: rangeInfo.lighterColor,
-            borderBottom: `2px solid ${rangeInfo.color}`
+            borderBottom: `2px solid ${rangeInfo.color}`,
+            backgroundClip: "border-box"
           }}
         >
           {content.slice(rangeInfo.range.start, rangeInfo.range.end)}
@@ -325,7 +326,7 @@ const CodePanel: React.FC<CodePanelProps> = ({
           <div key={file.id} className="code-item" data-file-id={file.id}>
             <Button
               type="text"
-              icon={file.isExpanded ? <DownOutlined /> : <RightOutlined />}
+              icon={file.isExpanded ? <CaretDownOutlined /> : <CaretRightOutlined />}
               onClick={() => toggleCode(file.id)}
               block
               className="code-header"

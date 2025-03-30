@@ -58,7 +58,7 @@ const DocumentationPanel: React.FC<DocumentationPanelProps> = ({
 
       // 更新本地状态
       const newDoc: DocumentationItem = {
-        id: result.id,
+        id: file.url ?? `url-unknown-file-${result.id}`,
         name: file.name,
         content,
         isExpanded: true,

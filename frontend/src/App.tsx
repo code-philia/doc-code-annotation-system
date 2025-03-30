@@ -8,6 +8,7 @@ import { Annotation, Range } from './types';
 import './App.css';
 import type { UploadProps } from 'antd';
 import { computeLighterColor, getRandomColor } from 'components/utils';
+import { useCrossViewStateStore } from 'crossState';
 
 const { Sider, Content } = Layout;
 
@@ -183,9 +184,12 @@ const App: React.FC = () => {
       _annotations = [newAnnotation, ...annotations];
 
       annotation = _annotations.find(a => a.id === newId) || null;
+
       if (!annotation) {
         message.error('创建标注失败');
         return;
+      } else {
+        setShouldFocusOnRename(newId);
       }
     }
 

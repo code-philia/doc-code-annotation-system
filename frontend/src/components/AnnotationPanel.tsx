@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, Button, Input, List, Modal, Form, message, Popconfirm } from 'antd';
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import classNames from 'classnames';
 import { Annotation } from '../types';
 import { computeLighterColor } from './utils';
+import { useCrossViewStateStore } from 'crossState';
 
 interface AnnotationPanelProps {
   className?: string;
@@ -29,6 +30,8 @@ const AnnotationItem = ({
   onChangeName: (name: string) => void;
 }) => {
   const [isNameBeingEdited, setIsNameBeingEdited] = useState(false);
+  const shouldFocusOnRenameId = useCrossViewStateStore((state) => state.shouldFocusOnRenameId);
+  const setShouldFocusOnRenameId = useCrossViewStateStore((state) => state.setShouldFocusOnRenameId);
 
   const handleDelete = (e?: React.MouseEvent<HTMLElement, MouseEvent> | undefined) => {
     if (e) {
@@ -36,6 +39,13 @@ const AnnotationItem = ({
       onDelete();
     }
   };
+
+  useEffect(() => {
+    if (selected && shouldFocusOnRenameId === annotation.id) {
+      setIsNameBeingEdited(true);
+      setShouldFocusOnRenameId(undefined);
+    }
+  }, [selected, shouldFocusOnRenameId])
 
   return (
     <div
@@ -52,23 +62,32 @@ const AnnotationItem = ({
         {
           isNameBeingEdited
             ? (
-              <form
+              <input
+                className="category"
+                title={annotation.category}
+                style={{
+                  color: annotation.color ?? '#000000'
+                }}
+                value={annotation.category}
                 onBlur={() => setIsNameBeingEdited(false)}
-              >
-                <input
-                  className="category"
-                  title={annotation.category}
-                  style={{
-                    color: annotation.color ?? '#000000'
-                  }}
-                  value={annotation.category}
-                />
-              </form>
+                onChange={(e) => onChangeName(e.target.value)}
+                onFocus={(e) => {
+                  e.target.select();
+                  e.target.scrollLeft = 0;
+                  e.target.scrollIntoView({ block: 'nearest' });
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.currentTarget.blur();
+                  }
+                }}
+                autoFocus
+              />
             )
             : (
               <div
                 className="category"
-
+                onClick={() => setIsNameBeingEdited(!isNameBeingEdited)}
                 title={annotation.category}
                 style={{
                   color: annotation.color ?? '#000000'
@@ -214,7 +233,7 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
 
 export default AnnotationPanel;
 
-function limitNameLength(name: string, limit: number = 8) {
+function limitNameLength(name: string, limit: number = 12) {
   if (name.length <= limit) {
     return name;
   }
