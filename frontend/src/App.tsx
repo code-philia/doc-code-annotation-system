@@ -17,8 +17,33 @@ interface HistoryState {
   currentAnnotation: Annotation | null;
 }
 
+interface HelpModalItem {
+  id: string;
+  title: string;
+  staticContent: JSX.Element;
+}
+const helpModalItems: HelpModalItem[] = [
+  {
+    id: 'basicUsage',
+    title: '基本使用',
+    staticContent: (
+      <div>
+        <p>文档、代码、标注会自动保存于该应用的本地存储。</p>
+        <p>使用 <code>Ctrl + Z</code> 和 <code>Ctrl + Y</code> 撤销和重做对标注的改动。</p>
+      </div>
+    )
+  },
+  {
+    id: 'about',
+    title: '关于',
+    staticContent: (<></>)
+  }
+];
+const helpModalOptions = helpModalItems.map(x => x.id);
+
 const App: React.FC = () => {
   const isFirstLoaded = useRef(true);
+  const setShouldFocusOnRename = useCrossViewStateStore((state) => state.setShouldFocusOnRenameId);
 
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [currentAnnotation, setCurrentAnnotation] = useState<Annotation | null>(null);
@@ -28,7 +53,9 @@ const App: React.FC = () => {
   const [history, setHistory] = useState<HistoryState[]>([]);
   const [currentHistoryIndex, setCurrentHistoryIndex] = useState(-1);
 
+  // 帮助对话框
   const [isHelpModalShown, setIsHelpModalShown] = useState(false);
+  const [currentHelpModalOption, setCurrentHelpModalOption] = useState('basicUsage');
 
   const getExistingColorIterable = function* () {
     for (const a of annotations) {
@@ -131,7 +158,7 @@ const App: React.FC = () => {
       category: category,
       documentRanges: [],
       codeRanges: [],
-      updateTime: newColor,
+      updateTime: new Date().toISOString(),
       color: newColor,
       lighterColor: newLighterColor
     };
@@ -173,7 +200,7 @@ const App: React.FC = () => {
 
       const newAnnotation: Annotation = {
         id: String(annotations.length + 1),
-        category: '未命名',
+        category: '未命名标注',
         documentRanges: [],
         codeRanges: [],
         updateTime: new Date().toISOString(),
@@ -472,10 +499,41 @@ const App: React.FC = () => {
           />
         </Content>
       </Layout>
-      <Modal title="Basic Modal" open={isHelpModalShown} footer={null} onCancel={() => { setIsHelpModalShown(!isHelpModalShown); }} mask={false}>
-        <p>Some contents...</p>
-        <p>Some contents...</p>
-        <p>Some contents...</p>
+      <Modal
+        className='help-modal'
+        title="帮助"
+        open={isHelpModalShown}
+        footer={null}
+        onCancel={() => {
+          setIsHelpModalShown(!isHelpModalShown);
+          setCurrentHelpModalOption('basicUsage');
+        }}
+        mask={false}
+      >
+        <Layout>
+          <Sider className="toolbar" width='100px' theme='light'>
+            <Space direction='vertical' size='middle' style={{ width: '100%', padding: '20px 12px 20px 0px', alignItems: 'center' }}>
+              {
+                helpModalItems.map(x =>
+                  <Button
+                    color='default'
+                    variant='text'
+                    style={{ width: '100%' }}
+                    className={x.id === currentHelpModalOption ? 'selected-help-modal-option' : undefined}
+                    onClick={() => { setCurrentHelpModalOption(x.id) }}
+                  >
+                    {x.title}
+                  </Button>
+                )
+              }
+            </Space>
+          </Sider>
+          <Content className='modal-content'>
+            {
+              helpModalItems.find(x => x.id === currentHelpModalOption)?.staticContent ?? ''
+            }
+          </Content>
+        </Layout>
       </Modal>
     </Layout>
   );
