@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Layout, Button, Space, message, Upload, Flex, Modal } from 'antd';
 import { SaveOutlined, RobotOutlined, DownloadOutlined, QuestionOutlined } from '@ant-design/icons';
 import DocumentationPanel from './components/DocumentPanel';
@@ -17,6 +17,8 @@ interface HistoryState {
 }
 
 const App: React.FC = () => {
+  const isFirstLoaded = useRef(true);
+
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [currentAnnotation, setCurrentAnnotation] = useState<Annotation | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -311,6 +313,10 @@ const App: React.FC = () => {
 
   // 加载保存的标注数据
   useEffect(() => {
+    if (!isFirstLoaded.current) {
+      return;
+    }
+
     const savedAnnotations = localStorage.getItem('annotations');
     if (savedAnnotations) {
       try {
@@ -322,7 +328,9 @@ const App: React.FC = () => {
         message.error('加载标注失败');
       }
     }
-  }, []);
+
+    isFirstLoaded.current = false;
+  }, [isFirstLoaded]);
 
   // 自动保存标注数据
   useEffect(() => {
