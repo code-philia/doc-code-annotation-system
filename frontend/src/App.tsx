@@ -304,11 +304,11 @@ const App: React.FC = () => {
   };
 
   const handleDocumentUpload = (result: { id: string; name: string }) => {
-    message.success(`文档 ${result.name} 上传成功`);
+    // message.success(`文档 ${result.name} 上传成功`);
   };
 
   const handleCodeUpload = (result: { id: string; name: string }) => {
-    message.success(`代码 ${result.name} 上传成功`);
+    // message.success(`代码 ${result.name} 上传成功`);
   };
 
   // 加载保存的标注数据
