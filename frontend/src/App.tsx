@@ -30,6 +30,7 @@ const helpModalItems: HelpModalItem[] = [
       <div>
         <p>文档、代码、标注会自动保存于该应用的本地存储。</p>
         <p>使用 <code>Ctrl + Z</code> 和 <code>Ctrl + Y</code> 撤销和重做对标注的改动。</p>
+        <p>如需使用 AI, 设置中填写 DeepSeek API Key.</p>
       </div>
     )
   },
@@ -494,6 +495,12 @@ const App: React.FC = () => {
   };
 
   const handleGenerateAnnotations = async () => {
+    if (apiToken.trim() === '') {
+      message.info(<span>使用 AI 前, 先填写 <a href='https://platform.deepseek.com/api_keys' target='_blank' rel='noopener noreferrer'>DeepSeek API Key.</a></span>);
+      setIsSettingsModalShow(true);
+      return;
+    }
+
     setIsLoading(true);
     try {
       const documentContent = docFiles[0]?.content ?? '';
@@ -716,7 +723,7 @@ const App: React.FC = () => {
               currentSettingsModalOption === 'ai'
                 ?
                 <div>
-                  <div style={{ padding: '0 0 2px 0', margin: 0, fontWeight: 'bold' }}>DeepSeek API Token</div>
+                  <div style={{ padding: '0 0 2px 0', margin: 0, fontWeight: 'bold' }}>DeepSeek API Key</div>
                   <Input
                     value={apiToken}
                     onChange={(e) => setApiToken(e.target.value)}
