@@ -54,6 +54,7 @@ const settingsModalItems: SettingsModalItem[] = [
 
 const App: React.FC = () => {
   const isFirstLoaded = useRef(true);
+  const isFilesFirstLoaded = useRef(true);
   const setShouldFocusOnRename = useCrossViewStateStore((state) => state.setShouldFocusOnRenameId);
 
   const [docFiles, setDocFiles] = useState<CodeItem[]>([]);
@@ -379,6 +380,27 @@ const App: React.FC = () => {
     isFirstLoaded.current = false;
   }, [isFirstLoaded]);
 
+  useEffect(() => {
+    if (!isFilesFirstLoaded.current) {
+      return;
+    }
+
+    const savedTargetFiles = localStorage.getItem('annotationTargetFiles');
+    if (savedTargetFiles) {
+      try {
+        const { docFiles: _docFiles, codeFiles: _codeFiles } = JSON.parse(savedTargetFiles);
+        setDocFiles(_docFiles);
+        setCodeFiles(_codeFiles);
+        message.success('已加载保存的文件');
+      } catch (error) {
+        console.error('Failed to load annotations:', error);
+        message.error('加载文件失败');
+      }
+    }
+
+    isFilesFirstLoaded.current = false;
+  }, [isFilesFirstLoaded]);
+
   // 自动保存标注数据
   useEffect(() => {
     try {
@@ -388,6 +410,18 @@ const App: React.FC = () => {
       message.error('保存标注失败');
     }
   }, [annotations]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('annotationTargetFiles', JSON.stringify({
+        docFiles: docFiles,
+        codeFiles: codeFiles
+      }));
+    } catch (error) {
+      console.error('Failed to save annotations:', error);
+      message.error('保存标注失败');
+    }
+  }, [docFiles, codeFiles]);
 
   // 手动保存标注数据
   const handleSaveAnnotations = () => {
