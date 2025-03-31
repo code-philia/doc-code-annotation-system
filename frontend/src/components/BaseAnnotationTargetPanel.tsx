@@ -10,6 +10,8 @@ import * as api from '../services/api';
 import { computeLighterColor, getCaretCharacterOffsetWithin } from './utils';
 
 interface BaseAnnotationTargetPanelPanelProps {
+  files: CodeItem[];
+  onSetFiles: (files: CodeItem[]) => void;
   targetType: string;
   targetTypeName: string;
   className?: string;
@@ -17,9 +19,12 @@ interface BaseAnnotationTargetPanelPanelProps {
   onAddToAnnotation?: (range: Range, targetType: string, annotationId?: string, createNew?: boolean) => void;
   onRemoveAnnotationRange?: (range: Range, targetType: string, annotationId: string) => void;
   annotations: Annotation[];
+  cssOnPre?: React.CSSProperties;
 }
 
 const BaseAnnotationTargetPanelPanel: React.FC<BaseAnnotationTargetPanelPanelProps> = ({
+  files,
+  onSetFiles,
   targetType,
   targetTypeName,
   className,
@@ -27,8 +32,8 @@ const BaseAnnotationTargetPanelPanel: React.FC<BaseAnnotationTargetPanelPanelPro
   onAddToAnnotation,
   onRemoveAnnotationRange,
   annotations,
+  cssOnPre
 }) => {
-  const [codeFiles, setCodeFiles] = useState<CodeItem[]>([]);
   const [selectedRange, setSelectedRange] = useState<Range | null>(null);
   const [selectionPosition, setSelectionPosition] = useState<{ top: number; left: number } | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -65,7 +70,7 @@ const BaseAnnotationTargetPanelPanel: React.FC<BaseAnnotationTargetPanelPanelPro
         content,
         isExpanded: true,
       };
-      setCodeFiles(prev => [...prev, newFile]);
+      onSetFiles([...files, newFile]);
       onUpload?.(result);
       message.success(`成功导入${targetTypeName}：${file.name}`);
     } catch (error) {
@@ -76,7 +81,7 @@ const BaseAnnotationTargetPanelPanel: React.FC<BaseAnnotationTargetPanelPanelPro
   };
 
   const toggleCode = (id: string) => {
-    setCodeFiles(files =>
+    onSetFiles(
       files.map(file =>
         file.id === id ? { ...file, isExpanded: !file.isExpanded } : file
       )
@@ -209,11 +214,12 @@ const BaseAnnotationTargetPanelPanel: React.FC<BaseAnnotationTargetPanelPanelPro
   const renderCodeContent = (fileId: string, content: string, annotations: Annotation[]) => {
     const inCodeAnnotations: Annotation[] = [];
     annotations.forEach(a => {
-      const inCodeRanges: Range[] = a.codeRanges.filter(r => r.documentId === fileId);
+      // FIXME bad way to discriminate codeRanges and documentRanges
+      const inCodeRanges: Range[] = (targetType === 'code' ? a.codeRanges : a.documentRanges).filter(r => r.documentId === fileId);
       if (inCodeRanges.length > 0) {
         inCodeAnnotations.push({
           ...a,
-          codeRanges: inCodeRanges
+          [(targetType === 'code' ? 'codeRange' : 'documentRanges')]: inCodeRanges
         })
       }
     });
@@ -231,7 +237,7 @@ const BaseAnnotationTargetPanelPanel: React.FC<BaseAnnotationTargetPanelPanelPro
       range: Range
     };
     let sortedRangeInfo: tempRangeInfo[] = inCodeAnnotations.flatMap(a => {
-      return a.codeRanges.map((r, i): tempRangeInfo => ({
+      return (targetType === 'code' ? a.codeRanges : a.documentRanges).map((r, i): tempRangeInfo => ({
         key: `${a.id}-${i}`,
         annotationId: a.id,
         color: a.color ?? '#000000',
@@ -305,14 +311,13 @@ const BaseAnnotationTargetPanelPanel: React.FC<BaseAnnotationTargetPanelPanelPro
     if (contentRef.current) {
       Prism.highlightAllUnder(contentRef.current);
     }
-  }, [codeFiles, annotations]); // 当标注改变时也需要重新高亮
+  }, [files, annotations]); // 当标注改变时也需要重新高亮
 
   return (
     <Card
       title={targetTypeName}
       extra={
         <Upload
-          accept=".py,.js,.ts,.jsx,.tsx,.java,.cpp,.c,.h,.hpp,.cs,.go,.rb,.php"
           beforeUpload={handleFileImport}
           showUploadList={false}
         >
@@ -322,7 +327,7 @@ const BaseAnnotationTargetPanelPanel: React.FC<BaseAnnotationTargetPanelPanelPro
       className={classNames('panel', className)}
     >
       <div className="panel-content" ref={contentRef}>
-        {codeFiles.map(file => (
+        {files.map(file => (
           <div key={file.id} className="code-item" data-file-id={file.id}>
             <Button
               type="text"
@@ -339,7 +344,9 @@ const BaseAnnotationTargetPanelPanel: React.FC<BaseAnnotationTargetPanelPanelPro
                 onMouseDown={handleMouseDown}
                 onMouseUp={handleCodeSelection}
               >
-                <pre className="code-block">
+                <pre
+                  className={"code-block" + (cssOnPre ? ' doc-block' : '')}
+                >
                   {renderCodeContent(
                     file.id,
                     file.content,

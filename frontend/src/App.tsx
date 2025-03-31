@@ -1,15 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Layout, Button, Space, message, Upload, Flex, Modal } from 'antd';
-import { SaveOutlined, RobotOutlined, DownloadOutlined, QuestionOutlined } from '@ant-design/icons';
-import DocumentationPanel from './components/DocumentPanel';
-import CodePanel from './components/CodePanel';
+import { Layout, Button, Space, message, Upload, Flex, Modal, Input } from 'antd';
+import { SaveOutlined, RobotOutlined, DownloadOutlined, QuestionOutlined, SettingOutlined } from '@ant-design/icons';
 import AnnotationPanel from './components/AnnotationPanel';
-import { Annotation, Range } from './types';
+import { Annotation, CodeItem, Range } from './types';
 import './App.css';
 import type { UploadProps } from 'antd';
 import { computeLighterColor, getRandomColor } from 'components/utils';
 import { useCrossViewStateStore } from 'crossState';
 import BaseAnnotationTargetPanelPanel from 'components/BaseAnnotationTargetPanel';
+import OpenAI from "openai";
 
 const { Sider, Content } = Layout;
 
@@ -42,9 +41,24 @@ const helpModalItems: HelpModalItem[] = [
 ];
 const helpModalOptions = helpModalItems.map(x => x.id);
 
+interface SettingsModalItem {
+  id: string;
+  title: string;
+}
+const settingsModalItems: SettingsModalItem[] = [
+  {
+    id: 'ai',
+    title: '人工智能'
+  }
+];
+
 const App: React.FC = () => {
   const isFirstLoaded = useRef(true);
   const setShouldFocusOnRename = useCrossViewStateStore((state) => state.setShouldFocusOnRenameId);
+
+  const [docFiles, setDocFiles] = useState<CodeItem[]>([]);
+  const [codeFiles, setCodeFiles] = useState<CodeItem[]>([]);
+  const pendingAnnotations = useRef<{ annotationId: string, targetType: string, range: Range }[]>([]);
 
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [currentAnnotation, setCurrentAnnotation] = useState<Annotation | null>(null);
@@ -53,6 +67,11 @@ const App: React.FC = () => {
   // 历史记录状态
   const [history, setHistory] = useState<HistoryState[]>([]);
   const [currentHistoryIndex, setCurrentHistoryIndex] = useState(-1);
+
+  // 设置对话框
+  const [isSettingsModalShow, setIsSettingsModalShow] = useState(false);
+  const [currentSettingsModalOption, setCurrentSettingsModalOption] = useState('ai');
+  const [apiToken, setApiToken] = useState('');
 
   // 帮助对话框
   const [isHelpModalShown, setIsHelpModalShown] = useState(false);
@@ -420,6 +439,108 @@ const App: React.FC = () => {
     reader.readAsText(file);
   };
 
+  const handleGenerateAnnotations = async () => {
+    setIsLoading(true);
+    try {
+      const documentContent = docFiles[0]?.content ?? '';
+      const codeContent = codeFiles[0]?.content ?? ''; // Replace with actual code content
+
+      const openai = new OpenAI({
+        baseURL: 'https://api.deepseek.com',
+        apiKey: apiToken,
+        dangerouslyAllowBrowser: true   // FIXME
+      });
+
+      // const getExistingAnnotationsOnDocAndCode = (docId: string, codeId: string) => {
+      //   const existingAnnotations: Annotation[] = [];
+      //   for (const a of annotations) {
+      //     const rangesInDoc = a.docrange
+      //   }
+      // }
+
+      const completion = await openai.chat.completions.create({
+        messages: [
+          {
+            role: "system",
+            content: "You are a helpful assistant on software engineering. Suggest a single new annotation on the documentation and code with annotations.\n\n" +
+              "Documentation:\n```\n" + documentContent + "\n```\n\n" +
+              "Code:\n```\n" + codeContent + "\n```\n\n" +
+              "Please abide by the following format in RegEx: `/annotation name: (.+?) document:<label>(.+?)<\/label> code: <label>(.+?)<\/label>/` .\n" +
+              "Fill in the annotation name with Chinese. Fill in the content with the original language (Chinese/English). I will extract the result with that." + ""
+              // (annotations.length === 0 ? "" : "Note that there are some existing annotations, do not replicate: " +
+              //   annotations
+              // )
+          },
+          {
+            role: "user",
+            content: `Document: ${documentContent}\nCode: ${codeContent}`
+          }
+        ],
+        model: "deepseek-chat"
+      });
+
+      const response = completion.choices[0].message.content;
+      if (response === null) {
+        throw new Error('无法从 API 响应中解析内容');
+      }
+
+      const annotationRegex = /annotation name: (.+?) document:<label>(.+?)<\/label> code: <label>(.+?)<\/label>/;
+      const match = response.match(annotationRegex);
+
+      if (match) {
+        const [, category, documentLabel, codeLabel] = match;
+
+        const newAnnotationId = await handleCreateAnnotation(category);
+        if (newAnnotationId) {
+          const documentStart = documentContent.indexOf(documentLabel);
+          const documentEnd = documentStart + documentLabel.length;
+          const documentRange: Range = {
+            documentId: docFiles[0]?.id ?? '',
+            start: documentStart,
+            end: documentEnd,
+            content: documentContent.slice(documentStart, documentEnd)
+          };
+
+          const codeStart = codeContent.indexOf(codeLabel);
+          const codeEnd = codeStart + codeLabel.length;
+          const codeRange: Range = {
+            documentId: codeFiles[0]?.id ?? 0,
+            start: codeStart,
+            end: codeEnd,
+            content: codeContent.slice(codeStart, codeEnd)
+          };
+
+          pendingAnnotations.current.push({
+            annotationId: newAnnotationId,
+            targetType: 'document',
+            range: documentRange
+          });
+          pendingAnnotations.current.push({
+            annotationId: newAnnotationId,
+            targetType: 'code',
+            range: codeRange
+          });
+        }
+      } else {
+        message.error("无法解析 DeepSeek API 的响应");
+      }
+    } catch (error) {
+      console.error("Failed to generate annotations:", error);
+      message.error("生成标注失败");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    console.log(`clearing pended annotation`);
+    if (pendingAnnotations.current.length > 0) {
+      const { annotationId, targetType, range } = pendingAnnotations.current[0];
+      handleAddToAnnotation(range, targetType, annotationId);
+      pendingAnnotations.current.splice(0, 1);
+    }
+  });
+
   const uploadProps: UploadProps = {
     beforeUpload: (file) => {
       if (file.type !== 'application/json') {
@@ -450,16 +571,21 @@ const App: React.FC = () => {
             />
             <Button
               icon={<RobotOutlined />}
-              onClick={() => {}}
+              onClick={handleGenerateAnnotations}
               loading={isLoading}
               title="AI自动生成标注"
             />
           </Space>
           <Space direction="vertical" size="middle" style={{ width: '100%', padding: '20px 0', alignItems: 'center' }}>
             <Button
+              icon={<SettingOutlined />}
+              onClick={() => { setIsSettingsModalShow(!isSettingsModalShow); }}
+              title="设置"
+            />
+            <Button
               icon={<QuestionOutlined />}
               onClick={() => { setIsHelpModalShown(!isHelpModalShown); }}
-              title="使用指南"
+              title="帮助"
             />
           </Space>
         </Flex>
@@ -468,6 +594,8 @@ const App: React.FC = () => {
       <Layout>
         <Content className="main-content">
         <BaseAnnotationTargetPanelPanel
+            files={docFiles}
+            onSetFiles={setDocFiles}
             targetType="document"
             targetTypeName='文档'
             className="panel"
@@ -478,6 +606,8 @@ const App: React.FC = () => {
             cssOnPre={{ whiteSpace: 'pre-wrap' }}
           />
           <BaseAnnotationTargetPanelPanel
+            files={codeFiles}
+            onSetFiles={setCodeFiles}
             targetType="code"
             targetTypeName='代码'
             className="panel"
@@ -497,6 +627,53 @@ const App: React.FC = () => {
           />
         </Content>
       </Layout>
+      <Modal
+        className='help-modal'
+        title="设置"
+        open={isSettingsModalShow}
+        footer={null}
+        onCancel={() => {
+          setIsSettingsModalShow(!isSettingsModalShow);
+          setCurrentSettingsModalOption('ai');
+        }}
+        mask={false}
+      >
+        <Layout>
+          <Sider className="toolbar" width='100px' theme='light'>
+            <Space direction='vertical' size='middle' style={{ width: '100%', padding: '20px 12px 20px 0px', alignItems: 'center' }}>
+            {
+                settingsModalItems.map(x =>
+                  <Button
+                    color='default'
+                    variant='text'
+                    style={{ width: '100%' }}
+                    className={x.id === currentSettingsModalOption ? 'selected-help-modal-option' : undefined}
+                    onClick={() => { setCurrentSettingsModalOption(x.id) }}
+                    key={x.id}
+                  >
+                    {x.title}
+                  </Button>
+                )
+              }
+            </Space>
+          </Sider>
+          <Content className='modal-content'>
+            {
+              currentSettingsModalOption === 'ai'
+                ?
+                <div>
+                  <div style={{ padding: '0 0 2px 0', margin: 0, fontWeight: 'bold' }}>DeepSeek API Token</div>
+                  <Input
+                    value={apiToken}
+                    onChange={(e) => setApiToken(e.target.value)}
+                  />
+                </div>
+                :
+                ''
+            }
+          </Content>
+        </Layout>
+      </Modal>
       <Modal
         className='help-modal'
         title="帮助"
