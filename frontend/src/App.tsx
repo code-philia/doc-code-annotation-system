@@ -9,6 +9,7 @@ import './App.css';
 import type { UploadProps } from 'antd';
 import { computeLighterColor, getRandomColor } from 'components/utils';
 import { useCrossViewStateStore } from 'crossState';
+import BaseAnnotationTargetPanelPanel from 'components/BaseAnnotationTargetPanel';
 
 const { Sider, Content } = Layout;
 
@@ -149,13 +150,15 @@ const App: React.FC = () => {
     };
   }, [currentHistoryIndex, history]);
 
-  const handleCreateAnnotation = async (category: string) => {
+  const handleCreateAnnotation = async (category?: string) => {
     const newColor = getRandomColor(getExistingColorIterable);
     const newLighterColor = computeLighterColor(newColor);
 
+    const id = String(annotations.length + 1);
+
     const newAnnotation: Annotation = {
-      id: String(annotations.length + 1),
-      category: category,
+      id: id,
+      category: category ?? '未命名标注',
       documentRanges: [],
       codeRanges: [],
       updateTime: new Date().toISOString(),
@@ -166,6 +169,11 @@ const App: React.FC = () => {
     let updateAnnotation = [newAnnotation, ...annotations];
     setAnnotations(updateAnnotation);
     setCurrentAnnotation(newAnnotation);
+
+    if (category === undefined) {
+      setShouldFocusOnRename(id);
+    }
+
     return newAnnotation.id;
   };
 
@@ -183,7 +191,7 @@ const App: React.FC = () => {
     return existingRanges.some(existing => isRangeOverlap(range, existing));
   };
 
-  const handleAddToAnnotation = async (range: Range, type: 'document' | 'code', id: string | undefined = undefined, createNew = false) => {
+  const handleAddToAnnotation = async (range: Range, type: string, id: string | undefined = undefined, createNew = false) => {
     let selectedAnnotation: Annotation | null = id === undefined ? null : (annotations.find(a => a.id === id) ?? null);
     if (selectedAnnotation === undefined) {
       selectedAnnotation = currentAnnotation;
@@ -281,46 +289,35 @@ const App: React.FC = () => {
     message.success('添加标注内容成功');
   };
 
-  const handleRemoveAnnotationRange = (range: Range, type: 'document' | 'code') => {
+  const handleRemoveAnnotationRange = (range: Range, type: string, annotationId: string) => {
     if (!currentAnnotation) {
       message.warning('请先选择一个标注项');
       return;
     }
 
+    const filterAnnotationRanges = (annotation: Annotation) => ({
+      ...annotation,
+      documentRanges: type === 'document'
+        ? annotation.documentRanges.filter(r =>
+            r.start !== range.start || r.end !== range.end
+          )
+        : annotation.documentRanges,
+      codeRanges: type === 'code'
+        ? annotation.codeRanges.filter(r =>
+            r.start !== range.start || r.end !== range.end
+          )
+        : annotation.codeRanges,
+      updatedAt: new Date().toISOString(),
+    });
+
     const newAnnotations = annotations.map(annotation => {
-      if (annotation.id === currentAnnotation.id) {
-        return {
-          ...annotation,
-          documentRanges: type === 'document'
-            ? annotation.documentRanges.filter(r =>
-                r.start !== range.start || r.end !== range.end
-              )
-            : annotation.documentRanges,
-          codeRanges: type === 'code'
-            ? annotation.codeRanges.filter(r =>
-                r.start !== range.start || r.end !== range.end
-              )
-            : annotation.codeRanges,
-          updatedAt: new Date().toISOString(),
-        };
+      if (annotation.id === annotationId) {
+        return filterAnnotationRanges(annotation);
       }
       return annotation;
     });
 
-    const newCurrentAnnotation = {
-      ...currentAnnotation,
-      documentRanges: type === 'document'
-        ? currentAnnotation.documentRanges.filter(r =>
-            r.start !== range.start || r.end !== range.end
-          )
-        : currentAnnotation.documentRanges,
-      codeRanges: type === 'code'
-        ? currentAnnotation.codeRanges.filter(r =>
-            r.start !== range.start || r.end !== range.end
-          )
-        : currentAnnotation.codeRanges,
-      updatedAt: new Date().toISOString(),
-    };
+    const newCurrentAnnotation = newAnnotations.find(a => a.id === currentAnnotation.id) ?? null;
 
     setAnnotations(newAnnotations);
     setCurrentAnnotation(newCurrentAnnotation);
@@ -470,23 +467,23 @@ const App: React.FC = () => {
 
       <Layout>
         <Content className="main-content">
-          <DocumentationPanel
-            className="panel"
-            onUpload={handleDocumentUpload}
-            onAddToAnnotation={(range, annotationId, createNew) => handleAddToAnnotation(range, 'document', annotationId, createNew)}
-            onRemoveAnnotationRange={(range) => handleRemoveAnnotationRange(range, 'document')}
-            onCreateAnnotation={() => handleCreateAnnotation('default')}
-            annotations={annotations}
-            currentAnnotation={currentAnnotation}
-          />
-          <CodePanel
+        <BaseAnnotationTargetPanelPanel
+            targetType="document"
+            targetTypeName='文档'
             className="panel"
             onUpload={handleCodeUpload}
-            onAddToAnnotation={(range, annotationId, createNew) => handleAddToAnnotation(range, 'code', annotationId, createNew)}
-            onRemoveAnnotationRange={(range) => handleRemoveAnnotationRange(range, 'code')}
-            onCreateAnnotation={() => handleCreateAnnotation('default')}
+            onAddToAnnotation={(range, targetType, annotationId, createNew) => handleAddToAnnotation(range, targetType, annotationId, createNew)}
+            onRemoveAnnotationRange={(range, targetType, annotationId) => handleRemoveAnnotationRange(range, targetType, annotationId)}
             annotations={annotations}
-            currentAnnotation={currentAnnotation}
+          />
+          <BaseAnnotationTargetPanelPanel
+            targetType="code"
+            targetTypeName='代码'
+            className="panel"
+            onUpload={handleCodeUpload}
+            onAddToAnnotation={(range, targetType, annotationId, createNew) => handleAddToAnnotation(range, targetType, annotationId, createNew)}
+            onRemoveAnnotationRange={(range, targetType, annotationId) => handleRemoveAnnotationRange(range, targetType, annotationId)}
+            annotations={annotations}
           />
           <AnnotationPanel
             annotations={annotations}
@@ -521,6 +518,7 @@ const App: React.FC = () => {
                     style={{ width: '100%' }}
                     className={x.id === currentHelpModalOption ? 'selected-help-modal-option' : undefined}
                     onClick={() => { setCurrentHelpModalOption(x.id) }}
+                    key={x.id}
                   >
                     {x.title}
                   </Button>
