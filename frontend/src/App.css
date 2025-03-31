@@ -240,13 +240,11 @@ body {
 
 /* 高亮样式 */
 .highlighted-text {
-  transition: all 0.3s;
   cursor: pointer;
   background-clip: padding-box;
 }
 
 .highlighted-code {
-  transition: all 0.3s;
   cursor: pointer;
   background-clip: padding-box;
 }
