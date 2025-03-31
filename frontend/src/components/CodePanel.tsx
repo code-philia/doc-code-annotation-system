@@ -7,7 +7,7 @@ import Prism from 'prismjs';
 import 'prismjs/themes/prism.css';
 import { CodeItem, Range, Annotation } from '../types';
 import * as api from '../services/api';
-import { getCaretCharacterOffsetWithin } from './utils';
+import { computeLighterColor, getCaretCharacterOffsetWithin } from './utils';
 
 interface CodePanelProps {
   className?: string;
@@ -245,7 +245,7 @@ const CodePanel: React.FC<CodePanelProps> = ({
       // 添加未高亮的代码
       if (rangeInfo.range.start > lastIndex) {
         parts.push(
-          <code key={`code-${index}`} className="language-python">
+          <code className="language-python">
             {content.slice(lastIndex, rangeInfo.range.start)}
           </code>
         );
@@ -254,7 +254,7 @@ const CodePanel: React.FC<CodePanelProps> = ({
       // 添加高亮的代码，支持点击取消标注
       parts.push(
         <code
-          key={`highlight-${index}`}
+          id={`highlight-${Date.now()}-${rangeInfo.annotationId}-${index}`}
           className="language-python highlighted-code"
           onClick={() => onRemoveAnnotationRange?.(rangeInfo.range)}
           title="点击取消标注"
@@ -362,8 +362,15 @@ const CodePanel: React.FC<CodePanelProps> = ({
               <Button
                 key={annotation.id}
                 size="small"
-                type={annotation.id === currentAnnotation?.id ? "primary" : "default"}
+                type="default"
                 onClick={() => handleAddToAnnotation(annotation.id)}
+                style={{
+                  color: annotation.color ?? '#000000',
+                  outlineColor: annotation.color ?? '#000000',
+                  border: 'none',
+                  backgroundColor: annotation.color ? computeLighterColor(annotation.color) : computeLighterColor('#000000'),
+                  outlineStyle: 'solid'
+                }}
               >
                 {annotation.category}
               </Button>
