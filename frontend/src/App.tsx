@@ -475,6 +475,7 @@ const App: React.FC = () => {
             onAddToAnnotation={(range, targetType, annotationId, createNew) => handleAddToAnnotation(range, targetType, annotationId, createNew)}
             onRemoveAnnotationRange={(range, targetType, annotationId) => handleRemoveAnnotationRange(range, targetType, annotationId)}
             annotations={annotations}
+            cssOnPre={{ whiteSpace: 'pre-wrap' }}
           />
           <BaseAnnotationTargetPanelPanel
             targetType="code"

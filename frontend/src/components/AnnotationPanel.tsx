@@ -93,7 +93,7 @@ const AnnotationItem = ({
                   color: annotation.color ?? '#000000'
                 }}
               >
-                {limitNameLength(annotation.category)}
+                {annotation.category}
               </div>
             )
         }
@@ -233,10 +233,14 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
 
 export default AnnotationPanel;
 
-function limitNameLength(name: string, limit: number = 12) {
-  if (name.length <= limit) {
+function limitNameLength(name: string, limit: number = 7) {
+  const textEncoder = new TextEncoder();
+  const utf8Bytes = textEncoder.encode(name)
+
+  if (utf8Bytes.length <= limit) {
     return name;
   }
 
-  return name.slice(0, limit - 2) + '...';
+  const textDecoder = new TextDecoder();
+  return textDecoder.decode(utf8Bytes).slice(0, limit - 2) + '...';
 }
