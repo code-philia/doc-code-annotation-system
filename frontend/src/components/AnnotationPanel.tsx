@@ -10,7 +10,7 @@ interface AnnotationPanelProps {
   className?: string;
   annotations: Annotation[];
   currentAnnotation?: Annotation | null;
-  onAnnotationCreate?: (category: string) => void;
+  onAnnotationCreate?: (category?: string) => void;
   onAnnotationSelect?: (annotation: Annotation) => void;
   onAnnotationDelete?: (annotationId: string) => void;
   onAnnotationRename?: (annotationId: string, annotationName: string) => void;
@@ -187,7 +187,7 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
         <Button
           type="primary"
           icon={<PlusOutlined />}
-          onClick={showCreateModal}
+          onClick={() => onAnnotationCreate?.()}
         >
           新建标注
         </Button>
