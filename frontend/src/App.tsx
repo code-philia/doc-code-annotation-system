@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Layout, Button, Space, message, Upload, Flex, Modal, Input } from 'antd';
-import { SaveOutlined, RobotOutlined, DownloadOutlined, QuestionOutlined, SettingOutlined } from '@ant-design/icons';
+import { RobotOutlined, DownloadOutlined, QuestionOutlined, SettingOutlined, UploadOutlined } from '@ant-design/icons';
 import AnnotationPanel from './components/AnnotationPanel';
 import { Annotation, CodeItem, Range } from './types';
 import './App.css';
@@ -427,7 +427,11 @@ const App: React.FC = () => {
   const handleSaveAnnotations = () => {
     try {
       // 创建要保存的数据
-      const data = JSON.stringify(annotations, null, 2);
+      const data = JSON.stringify({
+        annotations,
+        docFiles,
+        codeFiles
+      }, null, 2);
 
       // 创建 Blob 对象
       const blob = new Blob([data], { type: 'application/json' });
@@ -462,8 +466,10 @@ const App: React.FC = () => {
     reader.onload = (e) => {
       try {
         const content = e.target?.result as string;
-        const parsed = JSON.parse(content);
-        setAnnotations(parsed);
+        const { annotations, docFiles, codeFiles } = JSON.parse(content);
+        setAnnotations(annotations);
+        setDocFiles(docFiles);
+        setCodeFiles(codeFiles);
         message.success('标注数据加载成功');
       } catch (error) {
         console.error('Failed to load annotations:', error);
@@ -599,7 +605,7 @@ const App: React.FC = () => {
               />
             </Upload>
             <Button
-              icon={<SaveOutlined />}
+              icon={<UploadOutlined />}
               onClick={handleSaveAnnotations}
               title="导出标注"
             />
