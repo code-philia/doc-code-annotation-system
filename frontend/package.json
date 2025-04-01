@@ -11,9 +11,12 @@
     "antd": "^5.0.0",
     "assert": "^2.1.0",
     "axios": "^1.8.4",
+    "body-parser": "^2.2.0",
     "buffer": "^6.0.3",
     "classnames": "^2.3.1",
     "color-convert": "^3.0.1",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
     "https-browserify": "^1.0.0",
     "jschardet": "^3.1.4",
     "openai": "^4.90.0",
@@ -25,17 +28,21 @@
     "stream-http": "^3.2.0",
     "typescript": "^4.9.0",
     "url": "^0.11.4",
+    "word-extractor": "^1.0.4",
     "zustand": "^5.0.3"
   },
   "scripts": {
-    "start": "react-app-rewired start",
+    "start-frontend": "react-app-rewired start",
+    "start": "concurrently \"react-app-rewired start\" \"node util-server/server.js\"",
     "build": "react-app-rewired build",
     "test": "react-app-rewired test",
     "eject": "react-scripts eject"
   },
   "devDependencies": {
+    "@types/word-extractor": "^1.0.6",
     "@typescript-eslint/eslint-plugin": "^5.0.0",
     "@typescript-eslint/parser": "^5.0.0",
+    "concurrently": "^9.1.2",
     "react-app-rewired": "^2.2.1",
     "react-scripts": "5.0.1"
   },

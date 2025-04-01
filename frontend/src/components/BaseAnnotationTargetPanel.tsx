@@ -9,6 +9,7 @@ import { CodeItem, Range, Annotation } from '../types';
 import * as api from '../services/api';
 import { computeLighterColor, getCaretCharacterOffsetWithin } from './utils';
 import jschardet from 'jschardet';
+import WordExtractor from 'word-extractor';
 
 interface BaseAnnotationTargetPanelPanelProps {
   files: CodeItem[];
@@ -61,9 +62,27 @@ const BaseAnnotationTargetPanelPanel: React.FC<BaseAnnotationTargetPanelPanelPro
         reader.readAsArrayBuffer(file);
       });
 
+      let content = '';
       const contentBytesBuffer = Buffer.from(contentBytes);
-      const encoding = jschardet.detect(contentBytesBuffer).encoding ?? 'GB18030';  // 难以检测，所以默认为 GB18030，见 https://github.com/aadsm/jschardet/issues/49
-      const content = new TextDecoder(encoding).decode(contentBytesBuffer);
+
+      if (['.doc', '.docx'].some(suffix => file.name.endsWith(suffix))) {
+        const response = await fetch('http://localhost:5050/word-resolve', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/octet-stream'
+          },
+          body: contentBytesBuffer,
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to upload file to the server');
+        }
+
+        content = await response.text();
+      } else {
+        const encoding = jschardet.detect(contentBytesBuffer).encoding ?? 'GB18030';  // 难以检测，所以默认为 GB18030，见 https://github.com/aadsm/jschardet/issues/49
+        content = new TextDecoder(encoding).decode(contentBytesBuffer);
+      }
 
       // 上传到服务器
       const result = await api.uploadCode(file);
