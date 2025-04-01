@@ -169,6 +169,7 @@ body {
 
 .code-content pre {
   margin: 0;
+  max-height: 600px;
   padding: 16px;
   width: 100%;
   overflow: auto;
