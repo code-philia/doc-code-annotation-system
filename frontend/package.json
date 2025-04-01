@@ -15,6 +15,7 @@
     "classnames": "^2.3.1",
     "color-convert": "^3.0.1",
     "https-browserify": "^1.0.0",
+    "jschardet": "^3.1.4",
     "openai": "^4.90.0",
     "prismjs": "^1.29.0",
     "process": "^0.11.10",

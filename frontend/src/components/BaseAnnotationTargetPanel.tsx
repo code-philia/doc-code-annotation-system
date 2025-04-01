@@ -8,6 +8,7 @@ import 'prismjs/themes/prism.css';
 import { CodeItem, Range, Annotation } from '../types';
 import * as api from '../services/api';
 import { computeLighterColor, getCaretCharacterOffsetWithin } from './utils';
+import jschardet from 'jschardet';
 
 interface BaseAnnotationTargetPanelPanelProps {
   files: CodeItem[];
@@ -52,13 +53,17 @@ const BaseAnnotationTargetPanelPanel: React.FC<BaseAnnotationTargetPanelPanelPro
       }
 
       // 读取文件内容
-      const content = await new Promise<string>((resolve, reject) => {
+      const contentBytes = await new Promise<ArrayBuffer>((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target?.result as string);
+        reader.onload = (e) => resolve(e.target?.result as ArrayBuffer);
         reader.onerror = () => reject(new Error('文件读取失败'));
-        reader.readAsText(file);
-      })
-        .then((text) => text.replace(/\r\n?/g, '\n'));
+
+        reader.readAsArrayBuffer(file);
+      });
+
+      const contentBytesBuffer = Buffer.from(contentBytes);
+      const encoding = jschardet.detect(contentBytesBuffer).encoding ?? 'GB18030';  // 难以检测，所以默认为 GB18030，见 https://github.com/aadsm/jschardet/issues/49
+      const content = new TextDecoder(encoding).decode(contentBytesBuffer);
 
       // 上传到服务器
       const result = await api.uploadCode(file);
