@@ -37,7 +37,7 @@ const helpModalItems: HelpModalItem[] = [
   {
     id: 'about',
     title: '关于',
-    staticContent: (<></>)
+    staticContent: (<>作者：Yuhuan Huang & Code Philia Research Group.</>)
   }
 ];
 const helpModalOptions = helpModalItems.map(x => x.id);
@@ -141,6 +141,35 @@ const App: React.FC = () => {
 
     setAnnotations(updatedAnnotations);
   }
+
+  // 删除文件
+  const handleDeleteFile = (fileId: string, targetType: string) => {
+    if (targetType === 'document') {
+      const updatedDocFiles = docFiles.filter(file => file.id !== fileId);
+      setDocFiles(updatedDocFiles);
+
+      // 删除标注中该文档的范围
+      const updatedAnnotations = annotations.map(annotation => ({
+        ...annotation,
+        documentRanges: annotation.documentRanges.filter(range => range.documentId !== fileId),
+      }));
+      setAnnotations(updatedAnnotations);
+
+      message.success('文档已删除');
+    } else if (targetType === 'code') {
+      const updatedCodeFiles = codeFiles.filter(file => file.id !== fileId);
+      setCodeFiles(updatedCodeFiles);
+
+      // 删除标注中该代码的范围
+      const updatedAnnotations = annotations.map(annotation => ({
+        ...annotation,
+        codeRanges: annotation.codeRanges.filter(range => range.documentId !== fileId),
+      }));
+      setAnnotations(updatedAnnotations);
+
+      message.success('代码已删除');
+    }
+  };
 
   // 初始化历史记录
   useEffect(() => {
@@ -663,6 +692,7 @@ const App: React.FC = () => {
             onUpload={handleCodeUpload}
             onAddToAnnotation={(range, targetType, annotationId, createNew) => handleAddToAnnotation(range, targetType, annotationId, createNew)}
             onRemoveAnnotationRange={(range, targetType, annotationId) => handleRemoveAnnotationRange(range, targetType, annotationId)}
+            onRemoveFile={handleDeleteFile}
             annotations={annotations}
             cssOnPre={{ whiteSpace: 'pre-wrap' }}
           />
@@ -675,6 +705,7 @@ const App: React.FC = () => {
             onUpload={handleCodeUpload}
             onAddToAnnotation={(range, targetType, annotationId, createNew) => handleAddToAnnotation(range, targetType, annotationId, createNew)}
             onRemoveAnnotationRange={(range, targetType, annotationId) => handleRemoveAnnotationRange(range, targetType, annotationId)}
+            onRemoveFile={handleDeleteFile}
             annotations={annotations}
           />
           <AnnotationPanel

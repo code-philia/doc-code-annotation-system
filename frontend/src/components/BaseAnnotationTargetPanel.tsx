@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Card, Button, Upload, message } from 'antd';
-import { DownloadOutlined, CaretDownOutlined, CaretRightOutlined, PlusOutlined } from '@ant-design/icons';
+import { DownloadOutlined, CaretDownOutlined, CaretRightOutlined, PlusOutlined, DeleteFilled } from '@ant-design/icons';
 import type { UploadFile } from 'antd/es/upload/interface';
 import classNames from 'classnames';
 import Prism from 'prismjs';
@@ -9,7 +9,7 @@ import { CodeItem, Range, Annotation } from '../types';
 import * as api from '../services/api';
 import { computeLighterColor, getCaretCharacterOffsetWithin } from './utils';
 import jschardet from 'jschardet';
-import WordExtractor from 'word-extractor';
+import { Modal } from 'antd';
 
 interface BaseAnnotationTargetPanelPanelProps {
   files: CodeItem[];
@@ -20,6 +20,7 @@ interface BaseAnnotationTargetPanelPanelProps {
   onUpload?: (result: { id: string; name: string }) => void;
   onAddToAnnotation?: (range: Range, targetType: string, annotationId?: string, createNew?: boolean) => void;
   onRemoveAnnotationRange?: (range: Range, targetType: string, annotationId: string) => void;
+  onRemoveFile?: (fileId: string, targetType: string) => void;
   annotations: Annotation[];
   cssOnPre?: React.CSSProperties;
 }
@@ -33,6 +34,7 @@ const BaseAnnotationTargetPanelPanel: React.FC<BaseAnnotationTargetPanelPanelPro
   onUpload,
   onAddToAnnotation,
   onRemoveAnnotationRange,
+  onRemoveFile,
   annotations,
   cssOnPre
 }) => {
@@ -228,6 +230,20 @@ const BaseAnnotationTargetPanelPanel: React.FC<BaseAnnotationTargetPanelPanelPro
     }
   };
 
+  const handleDeleteFile = (fileId: string) => {
+    // 使用 antd 的 Modal.confirm
+
+    Modal.confirm({
+      title: '确认删除',
+      content: '确定要删除该文件吗？',
+      okText: '确认',
+      cancelText: '取消',
+      onOk: () => {
+        onRemoveFile?.(fileId, targetType);
+      },
+    });
+  };
+
   const handleCancelSelection = () => {
     setSelectedRange(null);
     setSelectionPosition(null);
@@ -355,12 +371,22 @@ const BaseAnnotationTargetPanelPanel: React.FC<BaseAnnotationTargetPanelPanelPro
           <div key={file.id} className="code-item" data-file-id={file.id}>
             <Button
               type="text"
-              icon={file.isExpanded ? <CaretDownOutlined /> : <CaretRightOutlined />}
               onClick={() => toggleCode(file.id)}
+              onMouseOver={(e) => e.currentTarget.querySelector('.delete-icon')?.classList.add('show')}
+              onMouseLeave={(e) => e.currentTarget.querySelector('.delete-icon')?.classList.remove('show')}
               block
               className="code-header"
+              title={file.name}
             >
-              {file.name}
+              {file.isExpanded ? <CaretDownOutlined /> : <CaretRightOutlined />}
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis " [..]"' }}>{file.name}</span>
+              <DeleteFilled
+                className='delete-icon'
+                onClick={(e) => {
+                  handleDeleteFile(file.id);
+                  e.stopPropagation();
+                }}
+              />
             </Button>
             {file.isExpanded && (
               <div
