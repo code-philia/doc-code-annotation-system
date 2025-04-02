@@ -43,6 +43,10 @@ body {
 .modal-content {
   background-color: #fff;
   padding: 8px 20px;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .selected-help-modal-option {
@@ -97,7 +101,7 @@ body {
   padding: 16px;
   border-radius: 4px;
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.5;
   overflow: hidden;
 }
 
@@ -232,6 +236,9 @@ body {
 /* 文件头部样式 */
 .document-header,
 .code-header {
+  display: flex;
+  justify-content: space-between;
+
   padding: 8px 12px;
   border-radius: 4px;
   border: 1px solid #999999;
@@ -241,6 +248,20 @@ body {
 .document-header:hover,
 .code-header:hover {
   background: #f8f8f8;
+}
+
+.code-header .delete-icon {
+  color: red;
+  opacity: 0;
+  transition: all 0.1s;
+}
+
+.code-header .delete-icon.show {
+  opacity: 0.3;
+}
+
+.code-header .delete-icon:hover {
+  opacity: 1.0;
 }
 
 /* 高亮样式 */
