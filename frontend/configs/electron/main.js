@@ -79,15 +79,15 @@ const projectBaseDir = path.join(__dirname, '../..');
 
 const createWindow = () => {
   const win = new BrowserWindow({
-    width: 800,
-    height: 600,
+    width: 1200,
+    height: 900,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js')
     },
     autoHideMenuBar: true
   })
 
-  win.loadFile(path.join('build/index.html'));
+  win.loadFile(path.join(process.resourcesPath, 'build', 'index.html'));
 }
 
 const wordDocumentResolve = async (buffer) => {
