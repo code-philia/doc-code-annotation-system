@@ -1,4 +1,5 @@
 const webpack = require('webpack');
+const path = require('path');
 
 module.exports = function override(config, env) {
   // 添加 Node polyfills
@@ -25,5 +26,12 @@ module.exports = function override(config, env) {
 
   config.devtool = 'eval-cheap-module-source-map';
 
+  if (process.env.NODE_ENV === 'production') {
+    config.output = {
+      ...config.output,
+      publicPath: './'
+    };
+  }
+
   return config;
-}; 
+};
