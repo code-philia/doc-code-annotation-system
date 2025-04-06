@@ -1,18 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Card, Button, Upload, message } from 'antd';
+import { Card, Button, Upload, Modal, message } from 'antd';
 import { DownloadOutlined, CaretDownOutlined, CaretRightOutlined, PlusOutlined, DeleteFilled } from '@ant-design/icons';
 import type { UploadFile } from 'antd/es/upload/interface';
 import classNames from 'classnames';
 import Prism from 'prismjs';
 import 'prismjs/themes/prism.css';
-import { CodeItem, Range, Annotation } from '../types';
-import * as api from '../services/api';
-import { computeLighterColor, getCaretCharacterOffsetWithin } from './utils';
 import jschardet from 'jschardet';
-import { Modal } from 'antd';
-import { BUILD_TYPE } from 'buildConfig';
 
-interface BaseAnnotationTargetPanelPanelProps {
+import * as api from '../services/api';
+import { CodeItem, Range, Annotation } from '../types';
+import { computeLighterColor, getCaretCharacterOffsetWithin } from './utils';
+import { BUILD_TYPE } from '../buildConfig';
+
+interface BaseAnnotationTargetPanelProps {
   files: CodeItem[];
   onSetFiles: (files: CodeItem[]) => void;
   targetType: string;
@@ -26,7 +26,7 @@ interface BaseAnnotationTargetPanelPanelProps {
   cssOnPre?: React.CSSProperties;
 }
 
-const BaseAnnotationTargetPanelPanel: React.FC<BaseAnnotationTargetPanelPanelProps> = ({
+const BaseAnnotationTargetPanel: React.FC<BaseAnnotationTargetPanelProps> = ({
   files,
   onSetFiles,
   targetType,
@@ -179,7 +179,7 @@ const BaseAnnotationTargetPanelPanel: React.FC<BaseAnnotationTargetPanelPanelPro
           top = viewportHeight - toolbarHeight - 10;
         }
 
-        // 设置位置
+        // 设置悬浮位置
         setSelectionPosition({ top, left });
 
         const selectedText = range.toString();
@@ -456,4 +456,4 @@ const BaseAnnotationTargetPanelPanel: React.FC<BaseAnnotationTargetPanelPanelPro
   );
 };
 
-export default BaseAnnotationTargetPanelPanel;
+export default BaseAnnotationTargetPanel;
