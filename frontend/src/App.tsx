@@ -30,7 +30,8 @@ const helpModalItems: HelpModalItem[] = [
       <div>
         <p>文档、代码、标注会自动保存于该应用的本地存储。</p>
         <p>使用 <code>Ctrl + Z</code> 和 <code>Ctrl + Y</code> 撤销和重做对标注的改动。</p>
-        <p>如需使用 AI, 设置中填写 DeepSeek API Key.</p>
+        <p>如需使用 AI，设置中填写 DeepSeek API Key。</p>
+        <p style={{ fontSize: 'smaller', color: '#00000055' }}>注意：联网使用 AI 时，文档和代码可能会分享给 DeepSeek。</p>
       </div>
     )
   },
@@ -49,7 +50,7 @@ interface SettingsModalItem {
 const settingsModalItems: SettingsModalItem[] = [
   {
     id: 'ai',
-    title: '人工智能'
+    title: 'AI'
   }
 ];
 
