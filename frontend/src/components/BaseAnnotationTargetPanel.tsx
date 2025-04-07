@@ -8,8 +8,8 @@ import 'prismjs/themes/prism.css';
 import jschardet from 'jschardet';
 
 import * as api from '../services/api';
-import { CodeItem, Range, Annotation } from '../types';
-import { computeLighterColor, getCaretCharacterOffsetWithin } from './utils';
+import { CodeItem, DocumentRange, Annotation } from '../types';
+import { ColorSetUp, computeLighterColor, RenderedDocument } from './utils';
 import { BUILD_TYPE } from '../buildConfig';
 
 interface BaseAnnotationTargetPanelProps {
@@ -19,8 +19,8 @@ interface BaseAnnotationTargetPanelProps {
   targetTypeName: string;
   className?: string;
   onUpload?: (result: { id: string; name: string }) => void;
-  onAddToAnnotation?: (range: Range, targetType: string, annotationId?: string, createNew?: boolean) => void;
-  onRemoveAnnotationRange?: (range: Range, targetType: string, annotationId: string) => void;
+  onAddToAnnotation?: (range: DocumentRange, targetType: string, annotationId?: string, createNew?: boolean) => void;
+  onRemoveAnnotationRange?: (range: DocumentRange, targetType: string, annotationId: string) => void;
   onRemoveFile?: (fileId: string, targetType: string) => void;
   annotations: Annotation[];
   cssOnPre?: React.CSSProperties;
@@ -39,9 +39,11 @@ const BaseAnnotationTargetPanel: React.FC<BaseAnnotationTargetPanelProps> = ({
   annotations,
   cssOnPre
 }) => {
-  const [selectedRange, setSelectedRange] = useState<Range | null>(null);
+  const [selectedRange, setSelectedRange] = useState<DocumentRange | null>(null);
   const [selectionPosition, setSelectionPosition] = useState<{ top: number; left: number } | null>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
+
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const cachedSelectedRange = useRef<Range | null>(null);
 
   const handleFileImport = async (file: UploadFile) => {
     try {
@@ -102,7 +104,7 @@ const BaseAnnotationTargetPanel: React.FC<BaseAnnotationTargetPanelProps> = ({
       const newFile: CodeItem = {
         id: file.url ?? `url-unknown-file-${result.id}`,
         name: file.name,
-        content,
+        content: content.replace(/\r?\n|\r/g, '\n'),
         isExpanded: true,
       };
       onSetFiles([...files, newFile]);
@@ -123,7 +125,7 @@ const BaseAnnotationTargetPanel: React.FC<BaseAnnotationTargetPanelProps> = ({
     );
   };
 
-  const handleCodeSelection = () => {
+  const handleCodeSelection = async () => {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || selection.toString().trim() === '') {
       setSelectedRange(null);
@@ -182,16 +184,31 @@ const BaseAnnotationTargetPanel: React.FC<BaseAnnotationTargetPanelProps> = ({
         // 设置悬浮位置
         setSelectionPosition({ top, left });
 
-        const selectedText = range.toString();
-        const start = getCaretCharacterOffsetWithin(codeFileElement!) ?? 0;
-        const end = start + selectedText.length;
+        const targetFile = files.find(f => f.id === fileId);
+        if (!targetFile) {
+          return;
+        }
+        if (!(targetFile.renderedDocument)) {
+          targetFile.renderedDocument = new RenderedDocument(targetFile.content, targetType === 'code' ? 'code' : 'markdown');
+        }
 
-        setSelectedRange({
-          start,
-          end,
-          content: selectedText,
-          documentId: fileId
-        });
+        const f = targetFile.content;
+        const r = targetFile.renderedDocument;
+
+        const selectedPre = codeFileElement;
+        if (selectedPre && selectedPre instanceof HTMLElement) {
+          const [start, end] = r.getSourceDocumentRange(selectedPre, range);
+          if (end - start > 0) {
+            cachedSelectedRange.current = range;
+
+            setSelectedRange({
+              start: start,
+              end: end,
+              content: f.slice(start, end),
+              documentId: fileId
+            });
+          }
+        }
       }
     } catch (error) {
       console.error('Selection error:', error);
@@ -260,84 +277,76 @@ const BaseAnnotationTargetPanel: React.FC<BaseAnnotationTargetPanelProps> = ({
   };
 
   // 渲染内容，包括高亮
-  const renderCodeContent = (fileId: string, content: string, annotations: Annotation[]) => {
-    const inCodeAnnotations: Annotation[] = [];
-    annotations.forEach(a => {
-      // FIXME bad way to discriminate codeRanges and documentRanges
-      const inCodeRanges: Range[] = (targetType === 'code' ? a.codeRanges : a.documentRanges).filter(r => r.documentId === fileId);
-      if (inCodeRanges.length > 0) {
-        inCodeAnnotations.push({
-          ...a,
-          [(targetType === 'code' ? 'codeRange' : 'documentRanges')]: inCodeRanges
-        })
-      }
-    });
-
-    if (inCodeAnnotations.length === 0) return content;
-
-    let lastIndex = 0;
-    const parts: JSX.Element[] = [];
-
-    type tempRangeInfo = {
-      key: string,
-      annotationId: string,
-      color: string,
-      lighterColor: string,
-      range: Range
-    };
-    let sortedRangeInfo: tempRangeInfo[] = inCodeAnnotations.flatMap(a => {
-      return (targetType === 'code' ? a.codeRanges : a.documentRanges).map((r, i): tempRangeInfo => ({
-        key: `${a.id}-${i}`,
-        annotationId: a.id,
-        color: a.color ?? '#000000',
-        lighterColor: a.lighterColor ?? 'rgba(103, 103, 103, 0.1)',
-        range: r
-      }));
-    });
-    sortedRangeInfo.sort((a, b) => a.range.start - b.range.start);
-
-    sortedRangeInfo.forEach((rangeInfo, index) => {
-      // 添加未高亮的内容
-      if (rangeInfo.range.start > lastIndex) {
-        parts.push(
-          <code className="language-python">
-            {content.slice(lastIndex, rangeInfo.range.start)}
-          </code>
-        );
-      }
-
-      // 添加高亮的内容，支持点击取消标注
-      parts.push(
-        <code
-          id={`highlight-${Date.now()}-${rangeInfo.annotationId}-${index}`}
-          className="language-python highlighted-code"
-          onClick={() => onRemoveAnnotationRange?.(rangeInfo.range, targetType, rangeInfo.annotationId)}
-          title="点击取消标注"
-          style={{
-            cursor: 'pointer',
-            backgroundColor: rangeInfo.lighterColor,
-            borderBottom: `2px solid ${rangeInfo.color}`,
-            backgroundClip: "border-box"
-          }}
-        >
-          {content.slice(rangeInfo.range.start, rangeInfo.range.end)}
-        </code>
-      );
-
-      lastIndex = rangeInfo.range.end;
-    });
-
-    // 添加剩余的未高亮内容
-    if (lastIndex < content.length) {
-      parts.push(
-        <code key="code-last" className="language-python">
-          {content.slice(lastIndex)}
-        </code>
-      );
+  useEffect(() => {
+    if (!(contentRef.current)) {
+      return;
     }
 
-    return parts;
-  };
+    const targetRangesType = targetType === 'code' ? 'codeRanges' : 'documentRanges';
+
+    for (const codeItem of contentRef.current.querySelectorAll('.code-item')) {
+      const documentId = codeItem.getAttribute('data-file-id');
+      const codePre = codeItem.querySelector('.code-block');
+      if (documentId === null || codePre === null || !(codePre instanceof HTMLElement)) {
+        continue;
+      }
+
+      const targetFile = files.find(f => f.id === documentId);
+      if (!targetFile) {
+        return;
+      }
+
+      (async () => {
+        if (!(targetFile.renderedDocument)) {
+          targetFile.renderedDocument = new RenderedDocument(targetFile.content, targetType === 'code' ? 'code' : 'markdown');  // FIXME Same logic as above
+        }
+
+        const r = targetFile.renderedDocument;
+        if (r.type === 'code') {
+          codePre.textContent = await r.render();
+        } else {
+          codePre.innerHTML = await r.render();
+        }
+
+        // calculate ranges
+        const coloredRanges: ColorSetUp[] = annotations
+          .map(a => {
+            const rangesInDocument = a[targetRangesType].filter(r => r.documentId === documentId)
+            if (rangesInDocument.length === 0) {
+              return undefined;
+            }
+            return {
+              color: a.color ?? '#000000',
+              lighterColor: a.lighterColor ?? 'rgba(103, 103, 103, 0.1)',
+              ranges: a[targetRangesType]
+                .filter(r => r.documentId === documentId),
+              handleClick: (e: MouseEvent, range: DocumentRange) => onRemoveAnnotationRange?.(range, targetType, a.id)
+            }
+          })
+          .flatMap(a =>       // each click event should cancel one colored range only, so flat them
+            a === undefined
+              ? []
+              : a.ranges.map(r => ({
+                ...a,
+                ranges: [r]
+              }))
+          )
+          .filter(x => x !== undefined);
+
+        r.colorAll(codePre, coloredRanges);
+
+        if (cachedSelectedRange.current) {
+          const sel = window.getSelection();
+          if (sel) {
+            sel.removeAllRanges();
+            sel.addRange(cachedSelectedRange.current);
+          }
+
+          cachedSelectedRange.current = null;
+        }
+      })();
+    }
+  }, [files, annotations]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -403,15 +412,17 @@ const BaseAnnotationTargetPanel: React.FC<BaseAnnotationTargetPanelProps> = ({
                 onMouseDown={handleMouseDown}
                 onMouseUp={handleCodeSelection}
               >
-                <pre
-                  className={"code-block" + (cssOnPre ? ' doc-block' : '')}
-                >
-                  {renderCodeContent(
-                    file.id,
-                    file.content,
-                    annotations
-                  )}
-                </pre>
+                {
+                  targetType === 'code'
+                    ?
+                    (<pre
+                      className={"code-block" + (cssOnPre ? ' doc-block' : '')}
+                    />)
+                    :
+                    (<div
+                      className={"code-block" + (cssOnPre ? ' doc-block' : '')}
+                    />)
+                }
               </div>
             )}
           </div>

@@ -105,63 +105,6 @@ body {
   overflow: hidden;
 }
 
-.document-content .ant-collapse {
-  background: transparent;
-  border: none;
-}
-
-.document-content .document-item {
-  margin-bottom: 16px;
-  background: #fff;
-  border-radius: 4px;
-  border: 1px solid #e9ecef;
-}
-
-.document-content .document-text {
-  padding: 16px;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
-.document-content .ant-collapse-content-box {
-  padding: 16px !important;
-  max-height: 400px;
-  overflow-y: auto;
-}
-
-.document-content .ant-collapse-content-box::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-.document-content .ant-collapse-content-box::-webkit-scrollbar-thumb {
-  background: #ccc;
-  border-radius: 3px;
-}
-
-.document-content .ant-collapse-content-box::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 3px;
-}
-
-.document-content .document-header {
-  padding: 8px 16px;
-  border-bottom: 1px solid #e9ecef;
-  background: #f8f9fa;
-  border-radius: 4px 4px 0 0;
-  text-align: left;
-}
-
-.document-content .document-header:hover {
-  background: #f1f3f5;
-}
-
-.document-content .document-text {
-  padding: 16px;
-  background: #fff;
-  border-radius: 0 0 4px 4px;
-}
-
 .code-content {
   position: relative;
   padding: 0;
@@ -178,16 +121,22 @@ body {
   width: 100%;
   overflow: auto;
   white-space: pre;
+  background-color: #f5f2f0aa;
+}
+
+.code-content pre:not(.doc-block) {
   font-family: 'Fira Code', 'Consolas', monospace;
-  background-color: #f5f2f0;
 }
 
-.code-content pre.doc-block {
-  white-space: pre-wrap;
+.code-content .doc-block table,
+.code-content .doc-block th,
+.code-content .doc-block td {
+  border: 1px solid grey;
+  border-collapse: collapse;
 }
 
-.code-content pre.doc-block code {
-  white-space: pre-wrap;
+.code-content .doc-block td {
+  padding: 1px 3px;
 }
 
 /* 自定义滚动条样式 */

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Layout, Button, Space, message, Upload, Flex, Modal, Input } from 'antd';
 import { RobotOutlined, DownloadOutlined, QuestionOutlined, SettingOutlined, UploadOutlined } from '@ant-design/icons';
 import AnnotationPanel from './components/AnnotationPanel';
-import { Annotation, CodeItem, Range } from './types';
+import { Annotation, CodeItem, DocumentRange } from './types';
 import './App.css';
 import type { UploadProps } from 'antd';
 import { computeLighterColor, getRandomColor } from 'components/utils';
@@ -59,7 +59,7 @@ const App: React.FC = () => {
 
   const [docFiles, setDocFiles] = useState<CodeItem[]>([]);
   const [codeFiles, setCodeFiles] = useState<CodeItem[]>([]);
-  const pendingAnnotations = useRef<{ annotationId: string, targetType: string, range: Range }[]>([]);
+  const pendingAnnotations = useRef<{ annotationId: string, targetType: string, range: DocumentRange }[]>([]);
 
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [currentAnnotation, setCurrentAnnotation] = useState<Annotation | null>(null);
@@ -227,7 +227,7 @@ const App: React.FC = () => {
   };
 
   // 检查范围是否重叠
-  const isRangeOverlap = (range1: Range, range2: Range): boolean => {
+  const isRangeOverlap = (range1: DocumentRange, range2: DocumentRange): boolean => {
     // 如果是不同文档的范围，不算重叠
     if (range1.documentId !== range2.documentId) {
       return false;
@@ -236,11 +236,11 @@ const App: React.FC = () => {
   };
 
   // 检查新范围是否与现有范围重叠
-  const hasOverlappingRange = (range: Range, existingRanges: Range[]): boolean => {
+  const hasOverlappingRange = (range: DocumentRange, existingRanges: DocumentRange[]): boolean => {
     return existingRanges.some(existing => isRangeOverlap(range, existing));
   };
 
-  const handleAddToAnnotation = async (range: Range, type: string, id: string | undefined = undefined, createNew = false) => {
+  const handleAddToAnnotation = async (range: DocumentRange, type: string, id: string | undefined = undefined, createNew = false) => {
     let selectedAnnotation: Annotation | null = id === undefined ? null : (annotations.find(a => a.id === id) ?? null);
     if (selectedAnnotation === undefined) {
       selectedAnnotation = currentAnnotation;
@@ -338,7 +338,7 @@ const App: React.FC = () => {
     message.success('添加标注内容成功');
   };
 
-  const handleRemoveAnnotationRange = (range: Range, type: string, annotationId: string) => {
+  const handleRemoveAnnotationRange = (range: DocumentRange, type: string, annotationId: string) => {
     if (!currentAnnotation) {
       message.warning('请先选择一个标注项');
       return;
@@ -410,6 +410,10 @@ const App: React.FC = () => {
     if (savedTargetFiles) {
       try {
         const { docFiles: _docFiles, codeFiles: _codeFiles } = JSON.parse(savedTargetFiles);
+
+        removeRenderedInfo(_docFiles);
+        removeRenderedInfo(_codeFiles);
+
         setDocFiles(_docFiles);
         setCodeFiles(_codeFiles);
         message.success('已加载保存的代码和文档');
@@ -446,6 +450,12 @@ const App: React.FC = () => {
 
   useEffect(() => {
     try {
+      const _docFiles = Array.from(docFiles);
+      const _codeFiles = Array.from(codeFiles);
+
+      removeRenderedInfo(_docFiles);
+      removeRenderedInfo(_codeFiles);
+
       localStorage.setItem('annotationTargetFiles', JSON.stringify({
         docFiles: docFiles,
         codeFiles: codeFiles
@@ -584,7 +594,7 @@ const App: React.FC = () => {
         if (newAnnotationId) {
           const documentStart = documentContent.indexOf(documentLabel);
           const documentEnd = documentStart + documentLabel.length;
-          const documentRange: Range = {
+          const documentRange: DocumentRange = {
             documentId: docFiles[0]?.id ?? '',
             start: documentStart,
             end: documentEnd,
@@ -593,7 +603,7 @@ const App: React.FC = () => {
 
           const codeStart = codeContent.indexOf(codeLabel);
           const codeEnd = codeStart + codeLabel.length;
-          const codeRange: Range = {
+          const codeRange: DocumentRange = {
             documentId: codeFiles[0]?.id ?? 0,
             start: codeStart,
             end: codeEnd,
@@ -808,3 +818,9 @@ const App: React.FC = () => {
 };
 
 export default App;
+
+function removeRenderedInfo(files: CodeItem[]) {
+  for (const f of files) {
+    delete f.renderedDocument;
+  }
+}
