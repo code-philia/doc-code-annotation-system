@@ -340,11 +340,6 @@ const App: React.FC = () => {
   };
 
   const handleRemoveAnnotationRange = (range: DocumentRange, type: string, annotationId: string) => {
-    if (!currentAnnotation) {
-      message.warning('请先选择一个标注项');
-      return;
-    }
-
     const filterAnnotationRanges = (annotation: Annotation) => ({
       ...annotation,
       documentRanges: type === 'document'
@@ -367,15 +362,19 @@ const App: React.FC = () => {
       return annotation;
     });
 
-    const newCurrentAnnotation = newAnnotations.find(a => a.id === currentAnnotation.id) ?? null;
+    let historyCurrentAnnotation = currentAnnotation;
+    if (currentAnnotation) {
+      const newCurrentAnnotation = newAnnotations.find(a => a.id === currentAnnotation.id) ?? null;
+      historyCurrentAnnotation = newCurrentAnnotation;
+      setCurrentAnnotation(newCurrentAnnotation);
+    }
 
     setAnnotations(newAnnotations);
-    setCurrentAnnotation(newCurrentAnnotation);
 
     // 添加到历史记录
     addToHistory({
       annotations: newAnnotations,
-      currentAnnotation: newCurrentAnnotation
+      currentAnnotation: historyCurrentAnnotation
     });
 
     message.success('取消标注成功');
@@ -634,7 +633,6 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    console.log(`clearing pended annotation`);
     if (pendingAnnotations.current.length > 0) {
       const { annotationId, targetType, range } = pendingAnnotations.current[0];
       handleAddToAnnotation(range, targetType, annotationId);
