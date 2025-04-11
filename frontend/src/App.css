@@ -114,18 +114,22 @@ body {
   overflow: hidden;
 }
 
-.code-content pre {
+.code-content .code-block {
   margin: 0;
   max-height: 600px;
-  padding: 16px;
   width: 100%;
   overflow: auto;
-  white-space: pre;
-  background-color: #f5f2f0aa;
+  background-color: #f5f2f077;
 }
 
-.code-content pre:not(.doc-block) {
+.code-content .code-block:not(.doc-block) {
+  padding: 16px;
+  white-space: pre;
   font-family: 'Fira Code', 'Consolas', monospace;
+}
+
+.code-content .doc-block {
+  padding: 0 16px;
 }
 
 .code-content .doc-block table,
