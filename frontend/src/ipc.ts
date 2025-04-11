@@ -3,7 +3,7 @@
  */
 
 export interface LocalFunctionality {
-    wordDocumentResolve: (buffer: Buffer) => Promise<string | undefined>;
+    wordDocumentResolve: (content: ArrayBuffer) => Promise<string | undefined>;
 }
 
 declare global {

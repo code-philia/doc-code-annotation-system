@@ -71,13 +71,14 @@ const BaseAnnotationTargetPanel: React.FC<BaseAnnotationTargetPanelProps> = ({
       const contentBytesBuffer = Buffer.from(contentBytes);
 
       if (['.doc', '.docx'].some(suffix => file.name.endsWith(suffix))) {
-        if (BUILD_TYPE === 'electron') {
-          content = await window.localFunctionality.wordDocumentResolve(contentBytesBuffer);
+        if (window.localFunctionality) {    // this is only present in electron build
+          content = await window.localFunctionality.wordDocumentResolve(new Uint8Array(contentBytesBuffer).buffer);
 
           if (content === undefined) {
             throw new Error('Failed to upload file to the server');
           }
         } else {
+          // console.log(`The build is not electron. Reading response from port 5050.`);
           const response = await fetch('http://localhost:5050/word-resolve', {
             method: 'POST',
             headers: {

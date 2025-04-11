@@ -72,10 +72,19 @@ const { app, BrowserWindow, ipcMain, protocol } = require('electron/main')
 
 const path = require('node:path')
 
-const WordExtractor = require("word-extractor");
-const extractor = new WordExtractor();
+// NOTE when using eval, Electron build will not automatically copy `word-to-markdown`
 
-const projectBaseDir = path.join(__dirname, '../..');
+// let wordToMarkdown;
+// const wordToMarkdownImport = async () => {
+//   if (!wordToMarkdown) {
+//     const { default: _wordToMarkdown } = await (eval('import("word-to-markdown")'));
+//     wordToMarkdown = _wordToMarkdown;
+//   }
+//   return wordToMarkdown;
+// }
+
+import wordToMarkdown from 'word-to-markdown';
+
 
 const createWindow = () => {
   const win = new BrowserWindow({
@@ -87,14 +96,32 @@ const createWindow = () => {
     autoHideMenuBar: true
   })
 
+  // https://stackoverflow.com/questions/75832777/inject-variable-into-renderers-window-object-before-any-javascript-on-the-rende
+  // win.webContents.on("did-start-loading", () => {
+  //   configPromise = new Promise((resolve) => {
+  //     win.webContents.executeJavaScript(`window.__BUILD_TYPE__ = 'electron'; console.log('assigning __BUILD_TYPE__');`, () => {
+  //       resolve();
+  //     });
+  //   });
+  // });
+
   win.loadFile(path.join(process.resourcesPath, 'build', 'index.html'));
+  // win.loadFile(path.join(__dirname, '../..', 'build', 'index.html'));  // DEBUG
 }
 
-const wordDocumentResolve = async (buffer) => {
-  extractor.extract(buffer)
-    .then((extracted) => {
-        return extracted.getBody();
-    });
+const wordDocumentResolve = async (event, content) => {
+  content = Buffer.from(new Uint8Array(content));
+
+  // NOTE No need to convert. .docx is originally UTF-8
+  // const encoding = jschardet.detect(content).encoding ?? 'GB18030';
+  // if (encoding !== 'UTF-8') {
+  //   const actualString = new TextDecoder(encoding).decode(content);
+  //   content = Buffer.from(actualString, 'utf-8');
+  // }
+
+  const wordToMarkdown = await wordToMarkdownImport();
+  const resultString = await wordToMarkdown(content);
+  return resultString;
 }
 
 app.whenReady().then(() => {
