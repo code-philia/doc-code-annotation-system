@@ -10,7 +10,7 @@ import jschardet from 'jschardet';
 import * as api from '../services/api';
 import { CodeItem, DocumentRange, Annotation } from '../types';
 import { ColorSetUp, computeLighterColor, RenderedDocument } from './utils';
-import { BUILD_TYPE } from '../buildConfig';
+import { BUILD_TYPE } from '../buildState';
 
 interface BaseAnnotationTargetPanelProps {
   files: CodeItem[];

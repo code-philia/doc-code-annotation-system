@@ -4,7 +4,7 @@ import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import classNames from 'classnames';
 import { Annotation } from '../types';
 import { computeLighterColor } from './utils';
-import { useCrossViewStateStore } from 'crossState';
+import { useCrossViewStateStore } from 'crossViewState';
 
 interface AnnotationPanelProps {
   className?: string;
