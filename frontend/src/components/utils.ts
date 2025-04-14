@@ -12,6 +12,7 @@ import { defaultHandlers } from 'remark-rehype';
 import { DocumentRange } from 'types';
 import { unified } from 'unified';
 import { trimLines } from 'trim-lines';
+import { CSSProperties } from 'react';
 
 // UUID generation
 // FIXME small probability of collision
@@ -222,11 +223,12 @@ export class RenderedDocument {
   }
 
   colorOne(rootElement: HTMLElement, coloredRange: ColorSetUp) {
-    const coloredStyle = {
+    const coloredStyle: CSSProperties = {
       cursor: 'pointer',
       backgroundColor: coloredRange.lighterColor,
       borderBottom: `2px solid ${coloredRange.color}`,
-      backgroundClip: "border-box"
+      backgroundClip: 'border-box',
+      marginBottom: '-2px'
     };
 
     for (const range of coloredRange.ranges) {
@@ -293,6 +295,7 @@ export class RenderedDocument {
         }
 
         coloredText = document.createElement('span');
+        coloredText.className = 'parse-text-wrapper';
         coloredText.textContent = fullText.slice(startOffset, endOffset);
         doColor(coloredText);
 
