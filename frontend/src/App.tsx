@@ -5,8 +5,8 @@ import AnnotationPanel from './components/AnnotationPanel';
 import { Annotation, CodeItem, DocumentRange } from './types';
 import './App.css';
 import type { UploadProps } from 'antd';
-import { computeLighterColor, getRandomColor } from 'components/utils';
-import { useCrossViewStateStore } from 'crossState';
+import { computeLighterColor, generateUUID, getRandomColor } from 'components/utils';
+import { useCrossViewStateStore } from 'crossViewState';
 import BaseAnnotationTargetPanel from 'components/BaseAnnotationTargetPanel';
 import OpenAI from "openai";
 
@@ -204,7 +204,7 @@ const App: React.FC = () => {
     const newColor = getRandomColor(getExistingColorIterable);
     const newLighterColor = computeLighterColor(newColor);
 
-    const id = String(annotations.length + 1);
+    const id = generateUUID();
 
     const newAnnotation: Annotation = {
       id: id,
@@ -252,12 +252,12 @@ const App: React.FC = () => {
 
     if (!annotation || createNew) {
       // 如果没有选中的标注项，自动创建一个新的
-      const newId = String(annotations.length + 1);
+      const newId = generateUUID();
       const newColor = getRandomColor(getExistingColorIterable);
       const newLighterColor = computeLighterColor(newColor);
 
       const newAnnotation: Annotation = {
-        id: String(annotations.length + 1),
+        id: newId,
         category: '未命名标注',
         documentRanges: [],
         codeRanges: [],
@@ -378,10 +378,6 @@ const App: React.FC = () => {
     });
 
     message.success('取消标注成功');
-  };
-
-  const handleDocumentUpload = (result: { id: string; name: string }) => {
-    // message.success(`文档 ${result.name} 上传成功`);
   };
 
   const handleCodeUpload = (result: { id: string; name: string }) => {
