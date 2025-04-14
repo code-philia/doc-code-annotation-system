@@ -13,6 +13,12 @@ import { DocumentRange } from 'types';
 import { unified } from 'unified';
 import { trimLines } from 'trim-lines';
 
+// UUID generation
+// FIXME small probability of collision
+export function generateUUID() {
+  return crypto.randomUUID();
+}
+
 // https://stackoverflow.com/questions/4811822/get-a-ranges-start-and-end-offsets-relative-to-its-parent-container
 export function getCaretCharacterOffsetWithin(container: Node, offset: number, element: Element, atStart = true): number | null {
   let caretOffset: number | null = null;
@@ -189,16 +195,21 @@ export class RenderedDocument {
   }
 
   getTargetDocumentRange(rootElement: HTMLElement, start: number, end: number): Range | null {
-    const startPosition = findPositionFromOffset(start, rootElement);
-    const endPosition = findPositionFromOffset(end, rootElement);
-
-    if (startPosition === null || endPosition === null) {
-      return null;
-    }
+    const startPosition = findPositionFromOffset(start, rootElement, true, false);
+    const endPosition = findPositionFromOffset(end, rootElement, false, true);
 
     const range = new Range();
-    range.setStart(startPosition[0], startPosition[1]);
-    range.setEnd(endPosition[0], endPosition[1]);
+    if (startPosition === null) {
+      range.setStartBefore(rootElement);
+    } else {
+      range.setStart(startPosition[0], startPosition[1]);
+    }
+
+    if (endPosition === null) {
+      range.setEndAfter(rootElement);
+    } else {
+      range.setEnd(endPosition[0], endPosition[1]);
+    }
 
     return range;
   }
@@ -217,6 +228,9 @@ export class RenderedDocument {
       if (htmlRange === null) {
         return;
       }
+
+      const hitsStart = htmlRange.startOffset === 0;
+      const hitsEnd = htmlRange.endOffset === getNodeMaxOffset(htmlRange.endContainer);
 
       const lca = htmlRange.commonAncestorContainer;
 
@@ -304,28 +318,60 @@ export class RenderedDocument {
           // parent.replaceChildren();   // NOTE While doing this, the range/selection that covers here will immediately be inactivated!
           colorText(currentNode);
         } else if (currentNode instanceof HTMLElement) {   // FIXME splitting doesn't work here now
-          if (startChild === undefined && endChild === undefined) {
+          if (!(startChild || endChild)) {
             doColor(currentNode);
           } else {
             // find start child node
             const children = currentNode.childNodes;
-            let i = 0;
-            for (; startChild && i < children.length && children[i] !== startChild; i++);
 
-            const startIndex = i;
+            let startChildAtStart = true;
+            let endChildAtEnd = true;
 
-            // color them, until the end child node
-            while (i < children.length) {
-              if (i === startIndex && trimStart) {
-                colorNode(children[i], depth, true, false);
-              } else if (children[i] === endChild && trimEnd) {
-                colorNode(children[i], depth, false, true);
-                break;
-              } else {
-                colorNode(children[i], depth, false, false);
+            let startIndex = 0;
+            let endIndex = children.length - 1;
+
+            if (startChild) {
+              let i = 0;
+              for (; i < children.length && children[i] !== startChild; i++) {
+                const child = children[i];
+                if (!isEmptyTextNode(child)) startChildAtStart = false;
               }
-              i++;
-            };
+              startIndex = i;
+            }
+
+            if (endChild) {
+              let i = children.length - 1;
+              for (; i >= startIndex && children[i] !== endChild; i--) {
+                const child = children[i];
+                if (!isEmptyTextNode(child)) endChildAtEnd = false;
+              }
+              endIndex = i;
+            }
+
+            let shouldColorAll = true;
+            if (startChild && !(hitsStart && startChildAtStart)) shouldColorAll = false;
+            else if (endChild && !(hitsEnd && endChildAtEnd)) shouldColorAll = false;
+
+            if (shouldColorAll) {
+              doColor(currentNode);
+            } else {
+              for (let j = startIndex; j < children.length; j++) {
+                const child = children[j];
+                if (isEmptyTextNode(child)) continue;
+
+                if (j === startIndex && trimStart) {
+                  colorNode(child, depth, true, false);
+                  continue;
+                }
+                if (j === endIndex && trimEnd) {
+                  colorNode(child, depth, false, true);
+                  break;
+                }
+
+                colorNode(child, depth, false, false);
+              };
+            }
+
           }
         }
       }
@@ -361,7 +407,7 @@ for (const _handlerType in customHandlers) {
   customHandlers[handlerType] = handler as any;
 }
 
-export function tableRowHandler(state: State, node: any, parent: Parents | undefined) {
+function tableRowHandler(state: State, node: any, parent: Parents | undefined) {
   const siblings = parent ? parent.children : undefined
   const rowIndex = siblings ? siblings.indexOf(node) : 1
   const tagName = rowIndex === 0 ? 'th' : 'td'
@@ -409,26 +455,26 @@ export function tableRowHandler(state: State, node: any, parent: Parents | undef
   return state.applyData(node, result as any)
 }
 
-export function text(state: State, node: any) {
+function text(state: State, node: any) {
   const result: any = {
     type: 'element',
     tagName: 'span',
+    properties: {
+      className: ['parse-text-wrapper'],
+      ['parse-start']: node.position.start.offset,
+      ['parse-end']: node.position.end.offset
+    },
     children: [{
       type: 'text',
       value: trimLines(String(node.value)),
     }]
   }
 
-  const properties: any = {}
-  properties['parse-start'] = node.position.start.offset
-  properties['parse-end'] = node.position.end.offset
-  result.properties = properties
-
   state.patch(node, result)
   return state.applyData(node, result)
 }
 
-export function inlineCode(state: State, node: any) {
+function inlineCode(state: State, node: any) {
   /** @type {Text} */
   const text: any = {
     type: 'element',
@@ -459,6 +505,28 @@ export function inlineCode(state: State, node: any) {
   return state.applyData(node, result)
 }
 
+// to process inlineMath and Math type nodes
+function defaultUnknownHandler(state: State, node: any) {
+  const data = node.data || {}
+  /** @type {HastElement | HastText} */
+  const result: any =
+    'value' in node &&
+    !(data.hasOwnProperty('hProperties') || data.hasOwnProperty('hChildren'))
+      ? {type: 'text', value: node.value}
+      : {
+          type: 'element',
+          tagName: 'div',
+          properties: {
+            ['parse-start']: node.position.start.offset,
+            ['parse-end']: node.position.end.offset
+          },
+          children: state.all(node)
+        }
+
+  state.patch(node, result)
+  return state.applyData(node, result)
+}
+
 // new handlers to record specific parse-start and parse-end
 customHandlers.tableRow = tableRowHandler;
 customHandlers.text = text;               // NOTE: Wrapping text node again is the simplest way to handle: '| xxx' in source document could be parsed to 'xxx'
@@ -469,17 +537,33 @@ export async function convertMarkdownWithMathToHTML(markdownText: string) {
     .use(remarkParse)
     .use(remarkGfm)
     .use(remarkMath)
+    // .parse(markdownText);
     .use(remarkRehype, {
-      handlers: customHandlers
+      handlers: customHandlers,
+      unknownHandler: defaultUnknownHandler
     } as any)
     .use(rehypeKatex)
     .use(rehypeStringify)
-    .process(markdownText)
+    .process(markdownText);
 
   return file.toString();
 }
 
+/**
+ * NOTE `findOffsetFromPosition` and `findPositionFromOffset` at start or end
+ * will be reduced to the closest position-parsed element (i.e. with `parsed-start` and `parsed-end` position)
+ */
+
+
 // find the first ancestor node with 'parse-start' attribute until `rootElement`
+
+/**
+ * Calculate the offset in the source text from an HTML position (the start or end of an HTML range), based on `parse-start` and `parse-end` attributes.
+ * @param container The node of the HTML position.
+ * @param offset The offset from container node of the HTML position.
+ * @param rootElement The rootElement to
+ * @returns
+ */
 export function findOffsetFromPosition(container: Node, offset: number, rootElement: Element): number | null {
   let node: Node | null = container;
   for (; node; node = node.parentNode) {
@@ -507,94 +591,95 @@ export function findOffsetFromPosition(container: Node, offset: number, rootElem
   return null;
 }
 
-export function findPositionFromOffset(offset: number, rootElement: Element): [Node, number] | null {
-  const findPositionIn = (nodeStartOffset: number, node: Node): [Node, number] | null => {
-    let length: number | undefined;
-    let parsedStartOffset: number | undefined;
-    let parsedEndOffset: number | undefined;
+/**
+ * Calculate the HTML position from an offset of the source text, based on `parse-start` and `parse-end` attributes.
+ * @param offset The offset in source text.
+ * @param rootElement
+ * @param reduceStart Option if the position should reduce to the closest non-span element
+ * @param reduceEnd Option if the position at the end should reduce to the closest non-span element
+ * @returns
+ */
+export function findPositionFromOffset(offset: number, rootElement: Element, reduceStart: boolean = false, reduceEnd: boolean = false): [Node, number] | null {
+  const reduceToAncestor = (node: Node | null, position: number): [Node, number] | null => {
+    for (; node && (!(node instanceof Element) || isWrapperSpan(node)); node = node?.parentNode ?? null);
 
-    // determine offset from the node itself, else from its previous or next sibling
-    if (node instanceof HTMLElement) {
-      parsedStartOffset = parseInt(node.getAttribute('parse-start') ?? 'nan');
-      parsedEndOffset = parseInt(node.getAttribute('parse-end') ?? 'nan');
-
-      if (Number.isNaN(parsedStartOffset)) {
-        parsedStartOffset = undefined;
-      }
-
-      if (Number.isNaN(parsedEndOffset)) {
-        parsedEndOffset = undefined;
-      }
-    }
-
-    let sibling: Node | null;
-    if (parsedStartOffset === undefined && (sibling = node.previousSibling) && (sibling instanceof HTMLElement)) {
-      parsedStartOffset = parseInt(sibling.getAttribute('parse-end') ?? 'nan');
-
-      if (Number.isNaN(parsedStartOffset)) {
-        parsedStartOffset = undefined;
-      }
-    }
-    if (parsedEndOffset === undefined && (sibling = node.nextSibling) && (sibling instanceof HTMLElement)) {
-      parsedEndOffset = parseInt(sibling.getAttribute('parse-start') ?? 'nan');
-
-      if (Number.isNaN(parsedEndOffset)) {
-        parsedEndOffset = undefined;
+    if (node) {
+      if (position === 0) {
+        return [node, 0];
+      } else {
+        return [node, getNodeMaxOffset(node)];
       }
     }
 
-    if (parsedStartOffset === undefined) {
-      parsedStartOffset = nodeStartOffset;
-    }
+    return null;
+  }
 
-    if (node instanceof Text) {
-      length = node.textContent?.length ?? 0;
-      if (!   // Except if we accurately know it is out of range
-        (
-          (parsedStartOffset !== undefined && offset < parsedStartOffset)
-          || (parsedEndOffset !== undefined && offset > parsedEndOffset)
-        )
+  const findPositionIn = (parentStartOffset: number | null, node: Node): [Node, number] | null => {
+    let parsedStartOffset: number | null;
+    let parsedEndOffset: number | null;
+
+    if (node instanceof Text && parentStartOffset !== null) {
+      if (offset - parentStartOffset <= (node.textContent?.length ?? 0)) {
+        return [node, offset - parentStartOffset];    // NOTE: '| xxx' in source document could be parsed to 'xxx', but now we wrap each Text Node under such special element with a <span> inside
+      }
+    } else if (node instanceof Element) {
+      // determine offset from the node itself
+      parsedStartOffset = getStartOffset(node);
+      parsedEndOffset = getEndOffset(node);
+
+      // else determine offset from its previous or next sibling
+      let sibling: Node | null;
+      if (parsedStartOffset === null && (sibling = node.previousSibling)) {
+        parsedStartOffset = getStartOffset(sibling);
+      }
+      if (parsedEndOffset === undefined && (sibling = node.nextSibling)) {
+        parsedEndOffset = getEndOffset(sibling);
+      }
+
+      if (
+        !(parsedStartOffset !== null && parsedStartOffset > offset)
+        && !(parsedEndOffset !== null && offset > parsedEndOffset)
+        && node.childNodes.length > 0
       ) {
-        if (offset - parsedStartOffset <= (node.textContent?.length ?? 0)) {
-          return [node, offset - parsedStartOffset];    // NOTE: '| xxx' in source document could be parsed to 'xxx', so the length is difficult to determine. In a same way as above, we calculate the offset from behind
+        let resultInChildNodes: [Node, number] | null = null;
+
+        for (let i = 0; i < node.childNodes.length; ++i) {
+          const parentStartOffset = i === 0 ? parsedStartOffset : null;
+          if (resultInChildNodes = findPositionIn(parentStartOffset, node.childNodes[i])) {
+            return resultInChildNodes;
+          }
         }
-      }
-    } else if (node instanceof HTMLElement) {
-      parsedStartOffset = parseInt(node.getAttribute('parse-start') ?? 'nan');
-      parsedEndOffset = parseInt(node.getAttribute('parse-end') ?? 'nan');
-      if (!isNaN(parsedStartOffset) && !isNaN(parsedEndOffset)) {
-        length = parsedEndOffset - parsedStartOffset;
-      }
-      if (node.childNodes.length > 0) {
-        if (parsedStartOffset <= offset && offset <= parsedEndOffset) {       // accurate offset
-          return findPositionIn(parsedStartOffset, node.childNodes[0]);
-        }
-        if (!(length !== undefined && offset - nodeStartOffset > length)) {   // inaccurate accumulative offset
-          return findPositionIn(nodeStartOffset, node.childNodes[0]);
+
+        if (resultInChildNodes === null) {
+          if (reduceStart && parsedStartOffset !== null) {
+            return [node, 0];
+          } else if (reduceEnd && parsedEndOffset !== null) {
+            return [node, getNodeMaxOffset(node)];
+          }
         }
       }
     }
 
-    // if no length defined or offset is out of length, go to the next sibling
-    let _node: Node | null = node;   // node to find the next sibling, going up the tree
-    for (; _node && _node !== rootElement && _node.nextSibling === null; _node = _node.parentNode);
+    return null;
+  }
 
-    if (_node === rootElement) {
-      return null;
-    }
+  let result = findPositionIn(0, rootElement);
 
-    const _sibling = _node?.nextSibling;
-    if (_sibling) {
-      return findPositionIn(nodeStartOffset + (length ?? 0), _sibling);
-    } else {
-      return null;
+  if (result && (reduceStart || reduceEnd)) {
+    const [resultNode, resultOffset] = result;
+
+    if (reduceStart && resultOffset === 0) {
+      return reduceToAncestor(resultNode, 0);
+    } else if (reduceEnd && resultOffset === getNodeMaxOffset(resultNode)) {
+      return reduceToAncestor(resultNode, Number.MAX_SAFE_INTEGER);
     }
   }
 
-  return findPositionIn(0, rootElement);
+  return result;
 }
 
-// Node Operations
+
+// DOM Node Operations
 
 function replaceNodeWithTwo(oldNode: Node, newNode1: Node, newNode2: Node) {
   const parent = oldNode.parentNode;
@@ -604,4 +689,47 @@ function replaceNodeWithTwo(oldNode: Node, newNode1: Node, newNode2: Node) {
     parent.insertBefore(newNode2, oldNode);
     parent.removeChild(oldNode);
   }
+}
+
+function getDepth(node: Node, from: Node = document.documentElement) {
+  let i = 0;
+
+  for (; node && node !== from; ++i);
+
+  return i;
+}
+
+function getParsedAttribute(node: Node, parsedAttributeName: string): number | null {
+  if (!(node instanceof Element)) return null;
+
+  const attributeName = `parse-${parsedAttributeName}`;
+
+  const attribute = parseInt(node.getAttribute(attributeName) ?? 'nan');
+
+  if (isNaN(attribute)) return null;
+  return attribute;
+}
+
+function getStartOffset(node: Node) {
+  return getParsedAttribute(node, 'start');
+}
+
+function getEndOffset(node: Node) {
+  return getParsedAttribute(node, 'end')
+}
+
+function getNodeMaxOffset(node: Node) {
+  if (node instanceof Text || node instanceof Comment || node instanceof CDATASection) {
+    return node.textContent?.length ?? 0;
+  }
+
+  return node.childNodes.length;
+}
+
+function isWrapperSpan(node: Node) {
+  return node instanceof HTMLSpanElement && node.classList.contains('parse-text-wrapper');
+}
+
+function isEmptyTextNode(node: Node) {
+  return node instanceof Text && !(node.textContent?.trim());
 }

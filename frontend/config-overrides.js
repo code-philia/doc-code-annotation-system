@@ -33,5 +33,8 @@ module.exports = function override(config, env) {
     };
   }
 
+  // support patches on node_modules
+  config.cache = false;
+
   return config;
 };

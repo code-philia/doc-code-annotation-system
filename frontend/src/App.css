@@ -451,3 +451,15 @@ body {
     transform: translateY(0);
   }
 }
+
+/* Katex customization */
+
+/* FIXME this will parent elements cover it */
+/* .katex .hide-tail {
+  z-index: -1;
+} */
+
+.parse-math {
+  display: inline-block;
+  height: fit-content;
+}
