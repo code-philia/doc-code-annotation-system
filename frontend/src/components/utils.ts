@@ -156,7 +156,14 @@ export class RenderedDocument {
       if (this.type === 'markdown') {
         this.renderedDocument = await convertMarkdownWithMathToHTML(this.sourceDocument);
       } else {
-        this.renderedDocument = this.sourceDocument;
+        const wrapperSpan = document.createElement('span');
+        wrapperSpan.className = 'parse-wrapper-span';
+        wrapperSpan.setAttribute('parse-start', '0');
+        wrapperSpan.setAttribute('parse-end', `${this.sourceDocument.length}`);
+        wrapperSpan.textContent = this.sourceDocument;
+
+        this.renderedDocument = wrapperSpan.outerHTML;
+        wrapperSpan.remove();
       }
     }
     return this.renderedDocument;

@@ -303,11 +303,7 @@ const BaseAnnotationTargetPanel: React.FC<BaseAnnotationTargetPanelProps> = ({
         }
 
         const r = targetFile.renderedDocument;
-        if (r.type === 'code') {
-          codePre.textContent = await r.render();
-        } else {
-          codePre.innerHTML = await r.render();
-        }
+        codePre.innerHTML = await r.render();
 
         // calculate ranges
         const coloredRanges: ColorSetUp[] = annotations
