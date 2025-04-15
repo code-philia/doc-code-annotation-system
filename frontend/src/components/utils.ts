@@ -275,7 +275,7 @@ export class RenderedDocument {
       }
 
       const colorText = (text: Text) => {
-        const fullText = text.textContent!;
+        const textContent = text.textContent!;
 
         let startOffset = 0;
         let endOffset = undefined;
@@ -285,18 +285,20 @@ export class RenderedDocument {
         let textAfter: Node | undefined;
 
         if (text === htmlRange.startContainer && htmlRange.startOffset > 0) {
-          textBefore = document.createTextNode(fullText.slice(0, htmlRange.startOffset));
+          textBefore = document.createTextNode(textContent.slice(0, htmlRange.startOffset));
           startOffset = htmlRange.startOffset;
         }
 
         if (text === htmlRange.endContainer && htmlRange.endOffset < (text.textContent?.length ?? 0)) {
-          textAfter = document.createTextNode(fullText.slice(htmlRange.endOffset));
+          textAfter = document.createTextNode(textContent.slice(htmlRange.endOffset));
           endOffset = htmlRange.endOffset;
         }
 
         coloredText = document.createElement('span');
-        coloredText.className = 'parse-text-wrapper';
-        coloredText.textContent = fullText.slice(startOffset, endOffset);
+        coloredText.className = 'parse-wrapper-span';
+        coloredText.setAttribute('parse-start', `${range.start}`);
+        coloredText.setAttribute('parse-end', `${range.end}`);
+        coloredText.textContent = textContent.slice(startOffset, endOffset);
         doColor(coloredText);
 
         // NOTE while inserting, the original range will immediately be inactivated
@@ -611,7 +613,13 @@ export function findOffsetFromPosition(container: Node, offset: number, rootElem
  */
 export function findPositionFromOffset(offset: number, rootElement: Element, reduceStart: boolean = false, reduceEnd: boolean = false): [Node, number] | null {
   const reduceToAncestor = (node: Node | null, position: number): [Node, number] | null => {
-    for (; node && (!(node instanceof Element) || isWrapperSpan(node)); node = node?.parentNode ?? null);
+    for (; node
+      && (!(node instanceof Element) || isWrapperSpan(node))            // is text or wrapper span
+      && (                                                              // is the first or last child node of parent
+           (position === 0 && node === node.parentNode?.firstChild)
+        || (position !== 0 && node === node.parentNode?.lastChild)
+      )
+      ; node = node?.parentNode ?? null);
 
     if (node) {
       if (position === 0) {
@@ -653,10 +661,21 @@ export function findPositionFromOffset(offset: number, rootElement: Element, red
       ) {
         let resultInChildNodes: [Node, number] | null = null;
 
+        let currentOffset: number | null = parsedStartOffset;
         for (let i = 0; i < node.childNodes.length; ++i) {
-          const parentStartOffset = i === 0 ? parsedStartOffset : null;
-          if (resultInChildNodes = findPositionIn(parentStartOffset, node.childNodes[i])) {
+          const childNode = node.childNodes[i];
+
+          if (resultInChildNodes = findPositionIn(currentOffset, childNode)) {
             return resultInChildNodes;
+          }
+
+          let lastOffset: number | null;
+          if (lastOffset = getEndOffset(childNode)) {
+            currentOffset = lastOffset;
+          } else if (currentOffset !== null && childNode instanceof Text) {
+            currentOffset = currentOffset + (childNode.textContent?.length ?? 0);
+          } else {
+            currentOffset = null;
           }
         }
 
