@@ -444,6 +444,10 @@ body {
 
 /* Katex customization */
 
+.katex {
+  display: inline-block;
+}
+
 /* FIXME this will parent elements cover it */
 /* .katex .hide-tail {
   z-index: -1;

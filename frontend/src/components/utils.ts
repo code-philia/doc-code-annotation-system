@@ -241,24 +241,32 @@ export class RenderedDocument {
         return;
       }
 
-      const hitsStart = htmlRange.startOffset === 0;
-      const hitsEnd = htmlRange.endOffset === getNodeMaxOffset(htmlRange.endContainer);
-
       const lca = htmlRange.commonAncestorContainer;
 
       const leftBorderParents: Node[] = [];
       const rightBorderParents: Node[] = [];
+      const leftBorderAtStart: boolean[] = [];
+      const rightBorderAtEnd: boolean[] = [];
 
-      let node: Node | null
+      let hitsStart = htmlRange.startOffset === 0;
+      let hitsEnd = htmlRange.endOffset === getNodeMaxOffset(htmlRange.endContainer);
+
+      let node: Node | null;
       for (node = htmlRange.startContainer; node && node !== lca; node = node.parentNode) {
         leftBorderParents.push(node);
+        hitsStart &&= (node === node.parentNode?.firstChild);
+        leftBorderAtStart.push(hitsStart);
       }
       for (node = htmlRange.endContainer; node && node !== lca; node = node.parentNode) {
         rightBorderParents.push(node);
+        hitsEnd &&= (node === node.parentNode?.lastChild);
+        rightBorderAtEnd.push(hitsEnd);
       }
 
       const getStartChildAtDepth = (d: number) => leftBorderParents.at(-d);
       const getEndChildAtDepth = (d: number) => rightBorderParents.at(-d);
+      const getIsLeftBorderAtStartAtDepth = (d: number) => leftBorderAtStart.at(-d);
+      const getIsRightBorderAtEndAtDepth = (d: number) => rightBorderAtEnd.at(-d);
 
       const addColoredStyle = (element: HTMLElement) => {
         for (const attr in coloredStyle) {
@@ -299,7 +307,7 @@ export class RenderedDocument {
           startOffset = htmlRange.startOffset;
         }
 
-        if (text === htmlRange.endContainer && htmlRange.endOffset < (text.textContent?.length ?? 0)) {
+        if (text === htmlRange.endContainer && htmlRange.endOffset < getNodeMaxOffset(text)) {
           textAfter = document.createTextNode(textContent.slice(htmlRange.endOffset));
           endOffset = htmlRange.endOffset;
         }
@@ -326,10 +334,17 @@ export class RenderedDocument {
       }
 
       const colorNode = (currentNode: Node, depth: number, trimStart: boolean, trimEnd: boolean, documentStartOffset: number) => {
+        if (currentNode === htmlRange.startContainer && htmlRange.startOffset >= getNodeMaxOffset(currentNode)) {
+          return;
+        }
+        if (currentNode === htmlRange.endContainer && htmlRange.endOffset === 0) {
+          return;
+        }
+
         const startChild = trimStart ? getStartChildAtDepth(depth) : undefined;
         const endChild = trimEnd ? getEndChildAtDepth(depth) : undefined;
-
-        depth += 1;
+        const startChildAtStart = getIsLeftBorderAtStartAtDepth(depth);
+        const endChildAtEnd = getIsRightBorderAtEndAtDepth(depth);
 
         // FIXME core logic, is nesting too much here
         if (
@@ -344,57 +359,52 @@ export class RenderedDocument {
             doColor(currentNode);
           } else {
             // find start child node
-            const childNodes = currentNode.childNodes;
-
-            let startChildAtStart = true;
-            let endChildAtEnd = true;
+            const childNodes = [...currentNode.childNodes];   // NOTE currentNode.childNodes may change when coloring!
 
             let startIndex = 0;
             let endIndex = childNodes.length - 1;
 
             if (startChild) {
               let i = 0;
-              for (; i < childNodes.length && childNodes[i] !== startChild; i++) {
+              for (; i <= endIndex && childNodes[i] !== startChild; i++) {
                 const child = childNodes[i];
-                if (!isEmptyTextNode(child)) startChildAtStart = false;
               }
-              startIndex = i;
+              if (i <= endIndex) {
+                startIndex = i;
+              }
             }
 
             if (endChild) {
               let i = childNodes.length - 1;
               for (; i >= startIndex && childNodes[i] !== endChild; i--) {
                 const child = childNodes[i];
-                if (!isEmptyTextNode(child)) endChildAtEnd = false;
               }
-              endIndex = i;
+              if (i >= startIndex) {
+                endIndex = i;
+              }
             }
 
             let shouldColorAll = true;
-            if (startChild && !(hitsStart && startChildAtStart)) shouldColorAll = false;
-            else if (endChild && !(hitsEnd && endChildAtEnd)) shouldColorAll = false;
+            if (startChild && !startChildAtStart) shouldColorAll = false;
+            else if (endChild && !endChildAtEnd) shouldColorAll = false;
 
             if (shouldColorAll) {
               doColor(currentNode);
             } else {
               let currentOffset = documentStartOffset;
 
-              for (let j = startIndex; j < childNodes.length; j++) {
+              for (let j = startIndex; j <= endIndex; j++) {
                 const childNode = childNodes[j];
                 if (isEmptyTextNode(childNode)) continue;
 
-                if (j === startIndex && trimStart) {
-                  colorNode(childNode, depth, true, false, currentOffset);
-                  continue;
-                }
-                if (j === endIndex && trimEnd) {
-                  colorNode(childNode, depth, false, true, currentOffset);
-                  break;
-                }
-
-                colorNode(childNode, depth, false, false, currentOffset);
+                // add guard for start and end offset, cause we did not check childNode parsed offsets like code in `findPositionFromOffset`
 
                 let lastOffset: number | null;
+                if (lastOffset = getStartOffset(childNode)) {
+                  currentOffset = lastOffset;
+                }
+                colorNode(childNode, depth + 1, j === startIndex && trimStart, j === endIndex && trimEnd, currentOffset);
+
                 if (lastOffset = getEndOffset(childNode)) {
                   currentOffset = lastOffset;
                 } else {
@@ -653,7 +663,8 @@ export function findPositionFromOffset(offset: number, rootElement: Element, red
     return null;
   }
 
-  const findPositionIn = (parentStartOffset: number | null, node: Node): [Node, number] | null => {
+  /* 'left' and 'right' indicates the node is on the left or right of offset */
+  const findPositionIn = (parentStartOffset: number | null, node: Node): [Node, number] | null | 'left' | 'right' => {
     let parsedStartOffset: number | null;
     let parsedEndOffset: number | null;
 
@@ -675,19 +686,28 @@ export function findPositionFromOffset(offset: number, rootElement: Element, red
         parsedEndOffset = getEndOffset(sibling);
       }
 
-      if (
-        !(parsedStartOffset !== null && parsedStartOffset > offset)
-        && !(parsedEndOffset !== null && offset > parsedEndOffset)
-        && node.childNodes.length > 0
-      ) {
+      if (parsedStartOffset !== null && parsedStartOffset > offset) {
+        return 'right';
+      } else if (parsedEndOffset !== null && offset > parsedEndOffset) {
+        return 'left';
+      } else if (node.childNodes.length > 0) {
         let resultInChildNodes: [Node, number] | null = null;
 
         let currentOffset: number | null = parsedStartOffset;
+        let lastChildNodeOnLeft: Node | null = null;
+        let firstChildNodeOnRight: Node | null = null;
 
         for (let i = 0; i < node.childNodes.length; ++i) {
           const childNode = node.childNodes[i];
+          const result = findPositionIn(currentOffset, childNode);
 
-          if (resultInChildNodes = findPositionIn(currentOffset, childNode)) {
+          if (result === 'left') {
+            lastChildNodeOnLeft = childNode;
+          } else if (result === 'right') {
+            if (firstChildNodeOnRight === null) {
+              firstChildNodeOnRight = childNode
+            }
+          } else if (resultInChildNodes = result) {
             return resultInChildNodes;
           }
 
@@ -703,9 +723,17 @@ export function findPositionFromOffset(offset: number, rootElement: Element, red
 
         if (resultInChildNodes === null) {
           if (reduceStart && parsedStartOffset !== null) {
-            return [node, 0];
+            if (lastChildNodeOnLeft) {
+              return [lastChildNodeOnLeft, getNodeMaxOffset(lastChildNodeOnLeft)];
+            } else {
+              return [node, 0];
+            }
           } else if (reduceEnd && parsedEndOffset !== null) {
-            return [node, getNodeMaxOffset(node)];
+            if (firstChildNodeOnRight) {
+              return [firstChildNodeOnRight, 0];
+            } else {
+              return [node, getNodeMaxOffset(node)];
+            }
           }
         }
       }
@@ -716,7 +744,7 @@ export function findPositionFromOffset(offset: number, rootElement: Element, red
 
   let result = findPositionIn(0, rootElement);
 
-  if (result && (reduceStart || reduceEnd)) {
+  if (result instanceof Array && (reduceStart || reduceEnd)) {
     const [resultNode, resultOffset] = result;
 
     if (reduceStart && resultOffset === 0) {
@@ -726,7 +754,7 @@ export function findPositionFromOffset(offset: number, rootElement: Element, red
     }
   }
 
-  return result;
+  return result instanceof Array ? result : null;
 }
 
 
