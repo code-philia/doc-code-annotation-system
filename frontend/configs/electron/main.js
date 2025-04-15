@@ -74,17 +74,14 @@ const path = require('node:path')
 
 // NOTE when using eval, Electron build will not automatically copy `word-to-markdown`
 
-// let wordToMarkdown;
-// const wordToMarkdownImport = async () => {
-//   if (!wordToMarkdown) {
-//     const { default: _wordToMarkdown } = await (eval('import("word-to-markdown")'));
-//     wordToMarkdown = _wordToMarkdown;
-//   }
-//   return wordToMarkdown;
-// }
-
-import wordToMarkdown from 'word-to-markdown';
-
+let wordToMarkdown;
+const wordToMarkdownImport = async () => {
+  if (!wordToMarkdown) {
+    const { default: _wordToMarkdown } = await (eval('import("word-to-markdown")'));
+    wordToMarkdown = _wordToMarkdown;
+  }
+  return wordToMarkdown;
+}
 
 const createWindow = () => {
   const win = new BrowserWindow({
