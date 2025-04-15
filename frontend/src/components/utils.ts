@@ -226,8 +226,11 @@ export class RenderedDocument {
     const coloredStyle: CSSProperties = {
       cursor: 'pointer',
       backgroundColor: coloredRange.lighterColor,
-      borderBottom: `2px solid ${coloredRange.color}`,
       backgroundClip: 'border-box',
+      borderBottom: `2px solid ${coloredRange.color}`,
+    };
+
+    const spanColoredStyle: CSSProperties = {
       marginBottom: '-2px'
     };
 
@@ -259,7 +262,14 @@ export class RenderedDocument {
 
       const addColoredStyle = (element: HTMLElement) => {
         for (const attr in coloredStyle) {
-          element.style[attr as Exclude<keyof CSSStyleDeclaration, 'length' | 'parentRule'>] = coloredStyle[attr as keyof typeof coloredStyle] as any;
+          const _attr = attr as Exclude<keyof CSSStyleDeclaration, 'length' | 'parentRule'>;
+          element.style[_attr] = coloredStyle[attr as keyof typeof coloredStyle] as any;
+        }
+        if (element instanceof HTMLSpanElement) {
+          for (const attr in spanColoredStyle) {
+            const _attr = attr as Exclude<keyof CSSStyleDeclaration, 'length' | 'parentRule'>;
+            element.style[_attr] = spanColoredStyle[attr as keyof typeof coloredStyle] as any;
+          }
         }
       }
 
@@ -274,11 +284,11 @@ export class RenderedDocument {
         addHandler(element);
       }
 
-      const colorText = (text: Text) => {
+      const colorText = (text: Text, documentStartOffset: number) => {
         const textContent = text.textContent!;
 
         let startOffset = 0;
-        let endOffset = undefined;
+        let endOffset = textContent.length;
 
         let textBefore: Node | undefined;
         let coloredText: HTMLElement | undefined;
@@ -296,8 +306,8 @@ export class RenderedDocument {
 
         coloredText = document.createElement('span');
         coloredText.className = 'parse-wrapper-span';
-        coloredText.setAttribute('parse-start', `${range.start}`);
-        coloredText.setAttribute('parse-end', `${range.end}`);
+        coloredText.setAttribute('parse-start', `${documentStartOffset + startOffset}`);
+        coloredText.setAttribute('parse-end', `${documentStartOffset + endOffset}`);
         coloredText.textContent = textContent.slice(startOffset, endOffset);
         doColor(coloredText);
 
@@ -315,7 +325,7 @@ export class RenderedDocument {
         text.remove();
       }
 
-      const colorNode = (currentNode: Node, depth: number, trimStart: boolean, trimEnd: boolean) => {
+      const colorNode = (currentNode: Node, depth: number, trimStart: boolean, trimEnd: boolean, documentStartOffset: number) => {
         const startChild = trimStart ? getStartChildAtDepth(depth) : undefined;
         const endChild = trimEnd ? getEndChildAtDepth(depth) : undefined;
 
@@ -328,33 +338,33 @@ export class RenderedDocument {
           && currentNode.textContent.trim() !== ''
         ) {
           // parent.replaceChildren();   // NOTE While doing this, the range/selection that covers here will immediately be inactivated!
-          colorText(currentNode);
+          colorText(currentNode, documentStartOffset);
         } else if (currentNode instanceof HTMLElement) {   // FIXME splitting doesn't work here now
           if (!(startChild || endChild)) {
             doColor(currentNode);
           } else {
             // find start child node
-            const children = currentNode.childNodes;
+            const childNodes = currentNode.childNodes;
 
             let startChildAtStart = true;
             let endChildAtEnd = true;
 
             let startIndex = 0;
-            let endIndex = children.length - 1;
+            let endIndex = childNodes.length - 1;
 
             if (startChild) {
               let i = 0;
-              for (; i < children.length && children[i] !== startChild; i++) {
-                const child = children[i];
+              for (; i < childNodes.length && childNodes[i] !== startChild; i++) {
+                const child = childNodes[i];
                 if (!isEmptyTextNode(child)) startChildAtStart = false;
               }
               startIndex = i;
             }
 
             if (endChild) {
-              let i = children.length - 1;
-              for (; i >= startIndex && children[i] !== endChild; i--) {
-                const child = children[i];
+              let i = childNodes.length - 1;
+              for (; i >= startIndex && childNodes[i] !== endChild; i--) {
+                const child = childNodes[i];
                 if (!isEmptyTextNode(child)) endChildAtEnd = false;
               }
               endIndex = i;
@@ -367,28 +377,38 @@ export class RenderedDocument {
             if (shouldColorAll) {
               doColor(currentNode);
             } else {
-              for (let j = startIndex; j < children.length; j++) {
-                const child = children[j];
-                if (isEmptyTextNode(child)) continue;
+              let currentOffset = documentStartOffset;
+
+              for (let j = startIndex; j < childNodes.length; j++) {
+                const childNode = childNodes[j];
+                if (isEmptyTextNode(childNode)) continue;
 
                 if (j === startIndex && trimStart) {
-                  colorNode(child, depth, true, false);
+                  colorNode(childNode, depth, true, false, currentOffset);
                   continue;
                 }
                 if (j === endIndex && trimEnd) {
-                  colorNode(child, depth, false, true);
+                  colorNode(childNode, depth, false, true, currentOffset);
                   break;
                 }
 
-                colorNode(child, depth, false, false);
+                colorNode(childNode, depth, false, false, currentOffset);
+
+                let lastOffset: number | null;
+                if (lastOffset = getEndOffset(childNode)) {
+                  currentOffset = lastOffset;
+                } else {
+                  currentOffset = currentOffset + (childNode.textContent?.length ?? 0);
+                }
               };
             }
-
           }
         }
       }
 
-      colorNode(lca, 1, true, true);   // from borderChild.at(-1)
+      const documentStartOffset = getPossibleParsedStartOffset(lca);
+
+      colorNode(lca, 1, true, true, documentStartOffset);   // from borderChild.at(-1)
     }
   }
 
@@ -441,7 +461,7 @@ function tableRowHandler(state: State, node: any, parent: Parents | undefined) {
 
     if (cell) {
       properties['parse-start'] = cell.position.start.offset,
-        properties['parse-end'] = cell.position.end.offset
+      properties['parse-end'] = cell.position.end.offset
     }
 
     /** @type {Element} */
@@ -591,6 +611,7 @@ export function findOffsetFromPosition(container: Node, offset: number, rootElem
       if (!Number.isNaN(i) && !Number.isNaN(j)) {
         const _offset = getCaretCharacterOffsetWithin(container, offset, node);
         return _offset === null ? null : j - ((node.textContent?.length ?? 0) - _offset);   // NOTE <td> parse-start will start from '| xxx' in source document
+        // NOTE do not use getTextContentBytesLength here because it is the length as string in sourceDocument
       }
     }
 
@@ -637,7 +658,7 @@ export function findPositionFromOffset(offset: number, rootElement: Element, red
     let parsedEndOffset: number | null;
 
     if (node instanceof Text && parentStartOffset !== null) {
-      if (offset - parentStartOffset <= (node.textContent?.length ?? 0)) {
+      if (0 <= offset - parentStartOffset && offset - parentStartOffset <= getNodeMaxOffset(node)) {
         return [node, offset - parentStartOffset];    // NOTE: '| xxx' in source document could be parsed to 'xxx', but now we wrap each Text Node under such special element with a <span> inside
       }
     } else if (node instanceof Element) {
@@ -662,6 +683,7 @@ export function findPositionFromOffset(offset: number, rootElement: Element, red
         let resultInChildNodes: [Node, number] | null = null;
 
         let currentOffset: number | null = parsedStartOffset;
+
         for (let i = 0; i < node.childNodes.length; ++i) {
           const childNode = node.childNodes[i];
 
@@ -761,4 +783,24 @@ function isWrapperSpan(node: Node) {
 
 function isEmptyTextNode(node: Node) {
   return node instanceof Text && !(node.textContent?.trim());
+}
+
+function getPossibleParsedStartOffset(node: Node) {
+  let startOffset: number | null = null;
+  let currentNode: Node | null = node;
+
+  for (; currentNode; currentNode = currentNode.parentNode) {
+    if (startOffset = getStartOffset(currentNode)) {
+      return startOffset;
+    }
+
+    while (currentNode.previousSibling) {
+      currentNode = currentNode.previousSibling;
+      if (startOffset = getEndOffset(currentNode)) {
+        return startOffset;
+      }
+    }
+  }
+
+  return 0;
 }
