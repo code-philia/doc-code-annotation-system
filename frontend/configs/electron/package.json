@@ -20,6 +20,7 @@
     "@electron-forge/plugin-auto-unpack-natives": "^7.8.0",
     "@electron-forge/plugin-fuses": "^7.8.0",
     "@electron/fuses": "^1.8.0",
+    "@rabbitholesyndrome/electron-forge-maker-portable": "^0.2.0",
     "electron": "^22.3.27"
   },
   "dependencies": {
@@ -33,11 +34,7 @@
       "!**/*.ts",
       "!*.map",
       "!package.json",
-      "!package-lock.json",
-      {
-        "from": "../../build",
-        "filter": ["**/*"]
-      }
+      "!package-lock.json"
     ]
   }
 }

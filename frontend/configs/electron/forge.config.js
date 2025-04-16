@@ -5,26 +5,39 @@ module.exports = {
   packagerConfig: {
     asar: true,
     extraResource: '../../build',
-    icon: './folder-1485.ico'
+    icon: './resources/folder-1485.ico',
+    ignore: ['release']   // NOTE will first package then make with --prepackaged, only ignore here is effective
   },
   rebuildConfig: {},
   makers: [
     {
-      name: '@electron-forge/maker-squirrel',
-      config: {},
+      name: "@rabbitholesyndrome/electron-forge-maker-portable",
+      config: {
+        directories: {
+          buildResources: "resources",
+          output: "release"
+        },
+        win: {
+          icon: './resources/folder-1485.ico'
+        }
+      }
     },
-    {
-      name: '@electron-forge/maker-zip',
-      platforms: ['darwin'],
-    },
-    {
-      name: '@electron-forge/maker-deb',
-      config: {},
-    },
-    {
-      name: '@electron-forge/maker-rpm',
-      config: {},
-    },
+    // {
+    //   name: '@electron-forge/maker-squirrel',
+    //   config: {},
+    // },
+    // {
+    //   name: '@electron-forge/maker-zip',
+    //   platforms: ['darwin'],
+    // },
+    // {
+    //   name: '@electron-forge/maker-deb',
+    //   config: {},
+    // },
+    // {
+    //   name: '@electron-forge/maker-rpm',
+    //   config: {},
+    // }
   ],
   plugins: [
     {
