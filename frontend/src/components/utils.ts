@@ -33,7 +33,7 @@ export function getCaretCharacterOffsetWithin(container: Node, offset: number, e
 }
 
 // Random color generation algorithm
-//https://stackoverflow.com/questions/521295/seeding-the-random-number-generator-in-javascript
+// https://stackoverflow.com/questions/521295/seeding-the-random-number-generator-in-javascript
 
 function cyrb128(str: string) {
   let h1 = 1779033703, h2 = 3144134277,
@@ -71,22 +71,77 @@ const randFp = sfc32(a, b, c, d);
 
 let randomCounter = 0;
 const cachedRandomColors: string[] = [];  // '#FFFFFF' format colors
+const cachedRandomColorRGB: [number, number, number][] = [];  // [r, g, b] format colors
 
-function randomColor() {
+function _randomColor() {
   randomCounter += 1;
 
   const h = 360 * randFp();
-  const s = 80;
-  const l = 40;
+  const s = 60 + 40 * randFp();
+  const l = 30 + 20 * randFp();
 
-  const newColor = '#' + ColorConvert.hsl.hex([h, s, l]);
-  cachedRandomColors.push(newColor);
-
-  return newColor;
+  return ColorConvert.hsl.rgb([h, s, l]);
 }
 
-function notInIterable<T>(value: T, existingIterable: Iterable<string>) {
+function randomColor() {
+  let distantColor = findAsDistantAsPossible(
+    _randomColor,
+    ([r1, g1, b1], [r2, g2, b2]) => Math.sqrt(Math.pow(r1 - r2, 2) + Math.pow(g1 - g2, 2) + Math.pow(b1 - b2, 2)),
+    () => cachedRandomColorRGB.values(),
+    70,
+    30,
+    10
+  )
+
+  if (!distantColor) {
+    distantColor = [0, 0, 0];
+  }
+
+  const newColorHex = '#' + ColorConvert.rgb.hex(distantColor);
+  cachedRandomColors.push(newColorHex);
+  cachedRandomColorRGB.push(distantColor);
+
+  return newColorHex;
+}
+
+function findAsDistantAsPossible<T>(generate: () => T, getDistance: (a: T, b: T) => number, getIterable: () => Iterable<T>, initialDistanceLimit: number, step: number, tries: number) {
+  let distance = initialDistanceLimit;
+
+  while (true) {
+    for (let i = 0; i < tries; ++i) {
+      const x = generate();
+      const it = getIterable();
+
+      let ok = true;
+
+      for (const y of it) {
+        if (getDistance(x, y) <= distance) {
+          ok = false;
+          break;
+        }
+      }
+
+      if (ok) {
+        return x;
+      }
+    }
+
+    if (distance <= 0) {
+      break;
+    }
+
+    distance = Math.max(distance - step, 0);
+  }
+
+  return null;
+}
+
+function notInIterable<T>(value: T, existingIterable: Iterable<T>, fallback?: T) {
   let notIn = true;
+
+  if (value === fallback) {
+    return notIn;
+  }
 
   for (const x of existingIterable) {
     if (value === x) {
