@@ -10,34 +10,31 @@ import jschardet from 'jschardet';
 import * as api from '../services/api';
 import { CodeItem, DocumentRange, Annotation } from '../types';
 import { ColorSetUp, computeLighterColor, RenderedDocument } from './utils';
-import { BUILD_TYPE } from '../buildState';
 
 interface BaseAnnotationTargetPanelProps {
   files: CodeItem[];
-  onSetFiles: (files: CodeItem[]) => void;
   targetType: string;
   targetTypeName: string;
-  className?: string;
+  annotations: Annotation[];
+  cssOnPre?: React.CSSProperties;
+  onSetFiles: (files: CodeItem[]) => void;
   onUpload?: (result: { id: string; name: string }) => void;
   onAddToAnnotation?: (range: DocumentRange, targetType: string, annotationId?: string, createNew?: boolean) => void;
   onRemoveAnnotationRange?: (range: DocumentRange, targetType: string, annotationId: string) => void;
   onRemoveFile?: (fileId: string, targetType: string) => void;
-  annotations: Annotation[];
-  cssOnPre?: React.CSSProperties;
 }
 
 const BaseAnnotationTargetPanel: React.FC<BaseAnnotationTargetPanelProps> = ({
   files,
-  onSetFiles,
   targetType,
   targetTypeName,
-  className,
+  annotations,
+  cssOnPre,
+  onSetFiles,
   onUpload,
   onAddToAnnotation,
   onRemoveAnnotationRange,
-  onRemoveFile,
-  annotations,
-  cssOnPre
+  onRemoveFile
 }) => {
   const [selectedRange, setSelectedRange] = useState<DocumentRange | null>(null);
   const [selectionPosition, setSelectionPosition] = useState<{ top: number; left: number } | null>(null);
@@ -306,13 +303,15 @@ const BaseAnnotationTargetPanel: React.FC<BaseAnnotationTargetPanelProps> = ({
         codePre.innerHTML = await r.render();
 
         // calculate ranges
-        const coloredRanges: ColorSetUp[] = annotations
+        const coloredRanges: ColorSetUp[]  = annotations
           .map(a => {
             const rangesInDocument = a[targetRangesType].filter(r => r.documentId === documentId)
             if (rangesInDocument.length === 0) {
               return undefined;
             }
             return {
+              id: a.id,
+              originalAnnotation: a,
               color: a.color ?? '#000000',
               lighterColor: a.lighterColor ?? 'rgba(103, 103, 103, 0.1)',
               ranges: a[targetRangesType]
@@ -341,7 +340,12 @@ const BaseAnnotationTargetPanel: React.FC<BaseAnnotationTargetPanelProps> = ({
 
           cachedSelectedRange.current = null;
         }
-      })();
+      })().then(() => {
+        if (targetFile.afterRender) {
+          targetFile.afterRender();
+          targetFile.afterRender = undefined;
+        }
+      })
     }
   }, [files, annotations]);
 
@@ -379,7 +383,7 @@ const BaseAnnotationTargetPanel: React.FC<BaseAnnotationTargetPanelProps> = ({
           <Button icon={<DownloadOutlined />}>导入</Button>
         </Upload>
       }
-      className={classNames('panel', className)}
+      className={classNames('panel', `panel-${targetType}`)}
     >
       <div className="panel-content" ref={contentRef}>
         {files.map(file => (

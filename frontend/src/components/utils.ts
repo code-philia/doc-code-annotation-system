@@ -133,6 +133,8 @@ export function computeLighterColor(cssHexColor: string, coef: number = 0.2) {
 // mapping and highlighting
 
 export interface ColorSetUp {
+  /** id for mapping */
+  id: string;
   /** Offsets in a source document (a documentation or code source file) to be colored. */
   ranges: DocumentRange[];
   /** CSS-supported color attribute. */
@@ -234,7 +236,9 @@ export class RenderedDocument {
       marginBottom: '-2px'
     };
 
-    for (const range of coloredRange.ranges) {
+    coloredRange.ranges.forEach((range, rangeIndex) => {
+      range.coloredElements = [];
+
       // line the borders
       const htmlRange = this.getTargetDocumentRange(rootElement, range.start, range.end);
       if (htmlRange === null) {
@@ -269,6 +273,8 @@ export class RenderedDocument {
       const getIsRightBorderAtEndAtDepth = (d: number) => rightBorderAtEnd.at(-d);
 
       const addColoredStyle = (element: HTMLElement) => {
+        element.classList.add('annotation-colored-element');
+
         for (const attr in coloredStyle) {
           const _attr = attr as Exclude<keyof CSSStyleDeclaration, 'length' | 'parentRule'>;
           element.style[_attr] = coloredStyle[attr as keyof typeof coloredStyle] as any;
@@ -290,6 +296,8 @@ export class RenderedDocument {
       const doColor = (element: HTMLElement) => {
         addColoredStyle(element);
         addHandler(element);
+
+        range.coloredElements!.push(element);
       }
 
       const colorText = (text: Text, documentStartOffset: number) => {
@@ -331,6 +339,8 @@ export class RenderedDocument {
         }
 
         text.remove();
+
+        return coloredText;
       }
 
       const colorNode = (currentNode: Node, depth: number, trimStart: boolean, trimEnd: boolean, documentStartOffset: number) => {
@@ -366,9 +376,7 @@ export class RenderedDocument {
 
             if (startChild) {
               let i = 0;
-              for (; i <= endIndex && childNodes[i] !== startChild; i++) {
-                const child = childNodes[i];
-              }
+              for (; i <= endIndex && childNodes[i] !== startChild; i++);
               if (i <= endIndex) {
                 startIndex = i;
               }
@@ -376,9 +384,7 @@ export class RenderedDocument {
 
             if (endChild) {
               let i = childNodes.length - 1;
-              for (; i >= startIndex && childNodes[i] !== endChild; i--) {
-                const child = childNodes[i];
-              }
+              for (; i >= startIndex && childNodes[i] !== endChild; i--);
               if (i >= startIndex) {
                 endIndex = i;
               }
@@ -419,13 +425,13 @@ export class RenderedDocument {
       const documentStartOffset = getPossibleParsedStartOffset(lca);
 
       colorNode(lca, 1, true, true, documentStartOffset);   // from borderChild.at(-1)
-    }
+    });
   }
 
   colorAll(rootElement: HTMLElement, coloredRanges: ColorSetUp[]) {
-    for (const range of coloredRanges) {
-      this.colorOne(rootElement, range);
-    }
+    coloredRanges.forEach((color, index) => {
+      this.colorOne(rootElement, color);
+    });
   }
 }
 

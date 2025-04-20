@@ -6,6 +6,15 @@ import { Annotation } from '../types';
 import { computeLighterColor } from './utils';
 import { useCrossViewStateStore } from 'crossViewState';
 
+interface AnnotationItemProps {
+  annotation: Annotation;
+  selected: boolean;
+  onClick: () => void;
+  onDelete: () => void;
+  onChangeName: (name: string) => void;
+  onReveal: (rangeType: string, rangeIndex: number) => void;
+}
+
 interface AnnotationPanelProps {
   className?: string;
   annotations: Annotation[];
@@ -14,6 +23,7 @@ interface AnnotationPanelProps {
   onAnnotationSelect?: (annotation: Annotation) => void;
   onAnnotationDelete?: (annotationId: string) => void;
   onAnnotationRename?: (annotationId: string, annotationName: string) => void;
+  onAnnotationReveal?: (annotationId: string, rangeType: string, rangeIndex: number) => void;
 }
 
 const AnnotationItem = ({
@@ -21,14 +31,9 @@ const AnnotationItem = ({
   selected,
   onClick,
   onDelete,
-  onChangeName
-}: {
-  annotation: Annotation;
-  selected: boolean;
-  onClick: () => void;
-  onDelete: () => void;
-  onChangeName: (name: string) => void;
-}) => {
+  onChangeName,
+  onReveal
+}: AnnotationItemProps) => {
   const [isNameBeingEdited, setIsNameBeingEdited] = useState(false);
   const shouldFocusOnRenameId = useCrossViewStateStore((state) => state.shouldFocusOnRenameId);
   const setShouldFocusOnRenameId = useCrossViewStateStore((state) => state.setShouldFocusOnRenameId);
@@ -105,12 +110,14 @@ const AnnotationItem = ({
       {(annotation.documentRanges.length > 0 || annotation.codeRanges.length > 0) && (
         <div className="range-preview">
           {annotation.documentRanges.map((range, index) => (
-            <div key={`doc-${index}`} className="preview-content">
+            <div key={`doc-${index}`} className="preview-content"
+            onClick={() => onReveal('document', index)}>
               {range.content}
             </div>
           ))}
           {annotation.codeRanges.map((range, index) => (
-            <div key={`code-${index}`} className="preview-content">
+            <div key={`code-${index}`} className="preview-content"
+            onClick={() => onReveal('code', index)}>
               {range.content}
             </div>
           ))}
@@ -149,37 +156,9 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
   onAnnotationCreate,
   onAnnotationSelect,
   onAnnotationDelete,
-  onAnnotationRename
+  onAnnotationRename,
+  onAnnotationReveal
 }) => {
-  const [isModalVisible, setIsModalVisible] = useState(false);
-  const [form] = Form.useForm();
-
-  const showCreateModal = () => {
-    setIsModalVisible(true);
-  };
-
-  const handleModalOk = async () => {
-    try {
-      const values = await form.validateFields();
-      const newAnnotationId = await onAnnotationCreate?.(values.category);
-      if (!newAnnotationId) {
-        message.error('创建标注失败');
-        return;
-      }
-      setIsModalVisible(false);
-      form.resetFields();
-      message.success('创建标注成功');
-    } catch (error) {
-      console.error('Validation failed:', error);
-      message.error('创建标注失败');
-    }
-  };
-
-  const handleModalCancel = () => {
-    setIsModalVisible(false);
-    form.resetFields();
-  };
-
   return (
     <Card
       title="标注"
@@ -205,28 +184,12 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
                 onClick={() => onAnnotationSelect?.(annotation)}
                 onDelete={() => onAnnotationDelete?.(annotation.id)}
                 onChangeName={(name) => onAnnotationRename?.(annotation.id, name)}
+                onReveal={(rangeType, rangeIndex) => onAnnotationReveal?.(annotation.id, rangeType, rangeIndex)}
               />
             </List.Item>
           )}
         />
       </div>
-
-      <Modal
-        title="新建标注"
-        open={isModalVisible}
-        onOk={handleModalOk}
-        onCancel={handleModalCancel}
-      >
-        <Form form={form} autoComplete='off'>
-          <Form.Item
-            name="category"
-            label="标注名称"
-            rules={[{ required: true, message: '请输入标注名称' }]}
-          >
-            <Input />
-          </Form.Item>
-        </Form>
-      </Modal>
     </Card>
   );
 };

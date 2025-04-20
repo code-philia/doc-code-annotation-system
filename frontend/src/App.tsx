@@ -5,7 +5,7 @@ import AnnotationPanel from './components/AnnotationPanel';
 import { Annotation, CodeItem, DocumentRange } from './types';
 import './App.css';
 import type { UploadProps } from 'antd';
-import { computeLighterColor, generateUUID, getRandomColor } from 'components/utils';
+import { computeLighterColor, generateUUID, getRandomColor, RenderedDocument } from 'components/utils';
 import { useCrossViewStateStore } from 'crossViewState';
 import BaseAnnotationTargetPanel from 'components/BaseAnnotationTargetPanel';
 import OpenAI from "openai";
@@ -200,28 +200,34 @@ const App: React.FC = () => {
     };
   }, [currentHistoryIndex, history]);
 
-  const handleCreateAnnotation = async (category?: string) => {
+  const createAnnotation = (options?: Partial<Annotation>) => {
+    const newId = generateUUID();
     const newColor = getRandomColor(getExistingColorIterable);
     const newLighterColor = computeLighterColor(newColor);
 
-    const id = generateUUID();
-
     const newAnnotation: Annotation = {
-      id: id,
-      category: category ?? '未命名标注',
+      id: newId,
+      category: '未命名标注',
       documentRanges: [],
       codeRanges: [],
       updateTime: new Date().toISOString(),
       color: newColor,
-      lighterColor: newLighterColor
+      lighterColor: newLighterColor,
+      ...(options ?? {})
     };
 
-    let updateAnnotation = [newAnnotation, ...annotations];
+    return newAnnotation;
+  }
+
+  const handleCreateAnnotation = async (category?: string) => {
+    const newAnnotation = createAnnotation(category ? { category } : undefined);
+    const updateAnnotation = [newAnnotation, ...annotations];
+
     setAnnotations(updateAnnotation);
     setCurrentAnnotation(newAnnotation);
 
     if (category === undefined) {
-      setShouldFocusOnRename(id);
+      setShouldFocusOnRename(newAnnotation.id);
     }
 
     return newAnnotation.id;
@@ -252,30 +258,12 @@ const App: React.FC = () => {
 
     if (!annotation || createNew) {
       // 如果没有选中的标注项，自动创建一个新的
-      const newId = generateUUID();
-      const newColor = getRandomColor(getExistingColorIterable);
-      const newLighterColor = computeLighterColor(newColor);
+      const newAnnotation = createAnnotation();
 
-      const newAnnotation: Annotation = {
-        id: newId,
-        category: '未命名标注',
-        documentRanges: [],
-        codeRanges: [],
-        updateTime: new Date().toISOString(),
-        color: newColor,
-        lighterColor: newLighterColor
-      };
-
+      annotation = newAnnotation;
       _annotations = [newAnnotation, ...annotations];
 
-      annotation = _annotations.find(a => a.id === newId) || null;
-
-      if (!annotation) {
-        message.error('创建标注失败');
-        return;
-      } else {
-        setShouldFocusOnRename(newId);
-      }
+      setShouldFocusOnRename(newAnnotation.id);
     }
 
     // 检查是否与当前标注的范围重叠
@@ -383,6 +371,88 @@ const App: React.FC = () => {
   const handleCodeUpload = (result: { id: string; name: string }) => {
     // message.success(`代码 ${result.name} 上传成功`);
   };
+
+  const handleRevealRange = (annotationId: string, rangeType: string, rangeIndex: number) => {
+    const annotation = annotations.find(a => a.id === annotationId);
+    if (!annotation) {
+      return;
+    }
+
+    const ranges = annotation[rangeType === 'code' ? 'codeRanges' : 'documentRanges'];
+    const range = ranges.at(rangeIndex);
+    if (!range) {
+      return;
+    }
+
+    const files = rangeType === 'code' ? codeFiles : docFiles;
+    const file = files.find(file => file.id === range.documentId);
+    if (!file) {
+      return;
+    }
+
+    const panelClassName = `panel-${rangeType === 'code' ? 'code' : 'document'}`;
+    const panelBlock = document.querySelector(`.${panelClassName}`);
+    if (!panelBlock) {
+      return;
+    }
+
+    const revealRange = () => {
+      const fileBlock = panelBlock
+        .querySelector(`[data-file-id="${file.id}"]`);
+      if (!fileBlock) {
+        return;
+      }
+
+      const contentBlock = fileBlock
+        .querySelector('.code-block');
+      if (!contentBlock || !(contentBlock instanceof HTMLElement)) {
+        return;
+      }
+
+      let rd = file.renderedDocument;
+      if (!rd) {
+        rd = file.renderedDocument = new RenderedDocument(file.content, rangeType === 'code' ? 'code' : 'markdown');
+      }
+
+      const htmlRange = rd.getTargetDocumentRange(contentBlock, range.start, range.end);
+      if (!htmlRange) {
+        return;
+      }
+
+      // 滚动到文件
+      fileBlock.scrollIntoView({ behavior: 'smooth' });
+
+      // 添加光效
+      if (range.coloredElements) {
+        for (const element of range.coloredElements) {
+          element.style.boxShadow = `0 0 10px ${annotation.color}`;
+        }
+
+        setTimeout(() => {
+          for (const element of range.coloredElements!) {
+              element.style.boxShadow = '';
+          }
+        }, 2000);
+      }
+
+      // 范围居中
+      const rangeRect = htmlRange.getBoundingClientRect();
+      const blockRect = contentBlock.getBoundingClientRect();
+      const scrollTop = contentBlock.scrollTop + rangeRect.top - blockRect.top - (contentBlock.clientHeight - rangeRect.height) / 2;
+
+      contentBlock.scrollTo({
+        top: scrollTop,
+        behavior: 'smooth'
+      });
+    }
+
+    // 显示文件并在渲染后滚动
+    const setFiles = rangeType === 'code' ? setCodeFiles : setDocFiles;
+    setFiles(files.map(_file =>
+      _file === file ? { ..._file, isExpanded: true, afterRender: revealRange } : _file
+    ));
+
+  }
 
   // 加载保存的标注数据
   useEffect(() => {
@@ -693,7 +763,6 @@ const App: React.FC = () => {
             onSetFiles={setDocFiles}
             targetType="document"
             targetTypeName='文档'
-            className="panel"
             onUpload={handleCodeUpload}
             onAddToAnnotation={(range, targetType, annotationId, createNew) => handleAddToAnnotation(range, targetType, annotationId, createNew)}
             onRemoveAnnotationRange={(range, targetType, annotationId) => handleRemoveAnnotationRange(range, targetType, annotationId)}
@@ -706,7 +775,6 @@ const App: React.FC = () => {
             onSetFiles={setCodeFiles}
             targetType="code"
             targetTypeName='代码'
-            className="panel"
             onUpload={handleCodeUpload}
             onAddToAnnotation={(range, targetType, annotationId, createNew) => handleAddToAnnotation(range, targetType, annotationId, createNew)}
             onRemoveAnnotationRange={(range, targetType, annotationId) => handleRemoveAnnotationRange(range, targetType, annotationId)}
@@ -720,6 +788,7 @@ const App: React.FC = () => {
             onAnnotationSelect={setCurrentAnnotation}
             onAnnotationDelete={handleDeleteAnnotation}
             onAnnotationRename={handleRenameAnnotation}
+            onAnnotationReveal={handleRevealRange}
             className="annotation-panel"
           />
         </Content>

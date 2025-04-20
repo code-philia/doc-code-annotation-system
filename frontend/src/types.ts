@@ -5,6 +5,7 @@ export interface DocumentRange {
   end: number;
   content: string;
   documentId?: string;
+  coloredElements?: HTMLElement[];
 }
 
 export interface AnnotationCategory {
@@ -24,14 +25,6 @@ export interface Annotation {
   lighterColor?: string;
 }
 
-export interface DocumentationItem {
-  id: string;
-  name: string;
-  /** Content of the document. All line breaks should be converted to \n to match `range.toString()` in HTML interface. */
-  content: string;
-  isExpanded: boolean;
-}
-
 export interface CodeItem {
   id: string;
   name: string;
@@ -39,4 +32,5 @@ export interface CodeItem {
   content: string;
   isExpanded: boolean;
   renderedDocument?: RenderedDocument;
+  afterRender?: () => void;
 }

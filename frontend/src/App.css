@@ -430,6 +430,14 @@ body {
   font-size: 12px;
 }
 
+.preview-content {
+  transition: all 0.1s;
+}
+
+.preview-content:hover {
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.15)
+}
+
 /* 动画效果 */
 @keyframes fadeIn {
   from {
@@ -456,4 +464,9 @@ body {
 .parse-math {
   display: inline-block;
   height: fit-content;
+}
+
+/* colored ranges */
+.annotation-colored-element {
+  transition: all 0.3s;
 }
