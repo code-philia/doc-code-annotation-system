@@ -469,7 +469,9 @@ const App: React.FC = () => {
         const parsed = JSON.parse(savedAnnotations);
 
         // compatible with old documentRanges
-        parsed.docRanges = [...(parsed.documentRanges ?? []), ...(parsed.docRanges ?? [])];
+        for (const a of parsed) {
+          a.docRanges = [...(a.documentRanges ?? []), ...(a.docRanges ?? [])];
+        }
 
         setAnnotations(parsed);
         message.success('已加载保存的标注');
@@ -610,6 +612,12 @@ const App: React.FC = () => {
       try {
         const content = e.target?.result as string;
         const { annotations, docFiles, codeFiles } = JSON.parse(content);
+
+        // compatible with old documentRanges
+        for (const a of annotations) {
+          a.docRanges = [...(a.documentRanges ?? []), ...(a.docRanges ?? [])];
+        }
+
         setAnnotations(annotations);
         setDocFiles(docFiles);
         setCodeFiles(codeFiles);
