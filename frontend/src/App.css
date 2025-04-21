@@ -379,6 +379,7 @@ body {
   border-bottom: 1px solid #e9ecef;
   white-space: pre-wrap;
   word-break: break-all;
+  line-height: 1.2;
 }
 
 .annotation-item .preview-content:last-child {
