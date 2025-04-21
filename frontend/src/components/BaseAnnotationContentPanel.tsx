@@ -103,6 +103,13 @@ const BaseAnnotationDocumentPanel: React.FC<BaseAnnotationContentPanelProps> = (
         content: content.replace(/\r?\n|\r/g, '\n'),
         isExpanded: true,
       };
+
+      // Electron imported path
+      const localPath: string = (file as any).path;
+      if (localPath) {
+        newFile.localPath = localPath;
+      }
+
       onSetFiles([...files, newFile]);
       onUpload?.(result);
       message.success(`成功导入${targetTypeName}：${file.name}`);
@@ -463,7 +470,11 @@ const BaseAnnotationDocumentBlock = ({
       title={file.name}
     >
       {file.isExpanded ? <CaretDownOutlined /> : <CaretRightOutlined />}
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis " [..]"' }}>{file.name}</span>
+      <div className='file-label'>
+        <div className='file-name'>{file.name}</div>
+        {file.localPath && <div className='file-path' title={file.localPath}>{file.localPath}</div>}
+      </div>
+
       <DeleteFilled
         className='delete-icon'
         onClick={(e) => {

@@ -181,6 +181,7 @@ body {
   display: flex;
   justify-content: space-between;
 
+  height: 40px;
   padding: 8px 12px;
   border-radius: 4px;
   border: 1px solid #999999;
@@ -189,6 +190,27 @@ body {
 
 .document-header:hover {
   background: #f8f8f8;
+}
+
+.document-header .file-label {
+  max-width: 80%;
+  display: flex;
+  flex-direction: column;
+}
+
+.document-header .file-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.document-header .file-path {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  font-size: smaller;
+  opacity: 50%;
 }
 
 .document-header .delete-icon {
@@ -357,7 +379,6 @@ body {
   border-bottom: 1px solid #e9ecef;
   white-space: pre-wrap;
   word-break: break-all;
-  line-height: 1.5;
 }
 
 .annotation-item .preview-content:last-child {

@@ -25,6 +25,7 @@ export interface AnnotationDocumentItem {     // document is not documentation
   /** Content of the document, a documentation or code file. All line breaks should be converted to \n to match `range.toString()` in HTML interface. */
   content: string;
   isExpanded: boolean;
+  localPath?: string;
 
   /** Render cache */
   renderedDocument?: RenderedDocument;
