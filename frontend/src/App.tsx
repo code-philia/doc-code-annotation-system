@@ -2,12 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Layout, Button, Space, message, Upload, Flex, Modal, Input } from 'antd';
 import { RobotOutlined, DownloadOutlined, QuestionOutlined, SettingOutlined, UploadOutlined } from '@ant-design/icons';
 import AnnotationPanel from './components/AnnotationPanel';
-import { Annotation, CodeItem, DocumentRange } from './types';
+import { Annotation, AnnotationDocumentItem, DocumentRange } from './types';
 import './App.css';
 import type { UploadProps } from 'antd';
 import { computeLighterColor, generateUUID, getRandomColor, RenderedDocument } from 'components/utils';
 import { useCrossViewStateStore } from 'crossViewState';
-import BaseAnnotationTargetPanel from 'components/BaseAnnotationTargetPanel';
+import BaseAnnotationDocumentPanel from 'components/BaseAnnotationContentPanel';
 import OpenAI from "openai";
 
 const { Sider, Content } = Layout;
@@ -58,8 +58,8 @@ const App: React.FC = () => {
   const isFirstLoaded = useRef(true);
   const setShouldFocusOnRename = useCrossViewStateStore((state) => state.setShouldFocusOnRenameId);
 
-  const [docFiles, setDocFiles] = useState<CodeItem[]>([]);
-  const [codeFiles, setCodeFiles] = useState<CodeItem[]>([]);
+  const [docFiles, setDocFiles] = useState<AnnotationDocumentItem[]>([]);
+  const [codeFiles, setCodeFiles] = useState<AnnotationDocumentItem[]>([]);
   const pendingAnnotations = useRef<{ annotationId: string, targetType: string, range: DocumentRange }[]>([]);
 
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
@@ -145,14 +145,14 @@ const App: React.FC = () => {
 
   // 删除文件
   const handleDeleteFile = (fileId: string, targetType: string) => {
-    if (targetType === 'document') {
+    if (targetType === 'doc') {
       const updatedDocFiles = docFiles.filter(file => file.id !== fileId);
       setDocFiles(updatedDocFiles);
 
       // 删除标注中该文档的范围
       const updatedAnnotations = annotations.map(annotation => ({
         ...annotation,
-        documentRanges: annotation.documentRanges.filter(range => range.documentId !== fileId),
+        docRanges: annotation.docRanges.filter(range => range.documentId !== fileId),
       }));
       setAnnotations(updatedAnnotations);
 
@@ -208,7 +208,7 @@ const App: React.FC = () => {
     const newAnnotation: Annotation = {
       id: newId,
       category: '未命名标注',
-      documentRanges: [],
+      docRanges: [],
       codeRanges: [],
       updateTime: new Date().toISOString(),
       color: newColor,
@@ -267,8 +267,8 @@ const App: React.FC = () => {
     }
 
     // 检查是否与当前标注的范围重叠
-    const existingRanges = type === 'document'
-      ? annotation.documentRanges
+    const existingRanges = type === 'doc'
+      ? annotation.docRanges
       : annotation.codeRanges;
 
     if (hasOverlappingRange(range, existingRanges)) {
@@ -279,7 +279,7 @@ const App: React.FC = () => {
     // 检查是否与其他标注的范围重叠
     const hasOverlapWithOther = _annotations.some(a => {
       if (a.id === annotation?.id) return false;
-      const ranges = type === 'document' ? a.documentRanges : a.codeRanges;
+      const ranges = type === 'doc' ? a.docRanges : a.codeRanges;
       return hasOverlappingRange(range, ranges);
     });
 
@@ -292,9 +292,9 @@ const App: React.FC = () => {
       if (a.id === annotation?.id) {
         return {
           ...a,
-          documentRanges: type === 'document'
-            ? [...a.documentRanges, range]
-            : a.documentRanges,
+          docRanges: type === 'doc'
+            ? [...a.docRanges, range]
+            : a.docRanges,
           codeRanges: type === 'code'
             ? [...a.codeRanges, range]
             : a.codeRanges,
@@ -306,9 +306,9 @@ const App: React.FC = () => {
 
     const newCurrentAnnotation = {
       ...annotation,
-      documentRanges: type === 'document'
-        ? [...annotation.documentRanges, range]
-        : annotation.documentRanges,
+      docRanges: type === 'doc'
+        ? [...annotation.docRanges, range]
+        : annotation.docRanges,
       codeRanges: type === 'code'
         ? [...annotation.codeRanges, range]
         : annotation.codeRanges,
@@ -330,11 +330,11 @@ const App: React.FC = () => {
   const handleRemoveAnnotationRange = (range: DocumentRange, type: string, annotationId: string) => {
     const filterAnnotationRanges = (annotation: Annotation) => ({
       ...annotation,
-      documentRanges: type === 'document'
-        ? annotation.documentRanges.filter(r =>
+      docRanges: type === 'doc'
+        ? annotation.docRanges.filter(r =>
             r.start !== range.start || r.end !== range.end
           )
-        : annotation.documentRanges,
+        : annotation.docRanges,
       codeRanges: type === 'code'
         ? annotation.codeRanges.filter(r =>
             r.start !== range.start || r.end !== range.end
@@ -378,7 +378,7 @@ const App: React.FC = () => {
       return;
     }
 
-    const ranges = annotation[rangeType === 'code' ? 'codeRanges' : 'documentRanges'];
+    const ranges = annotation[rangeType === 'code' ? 'codeRanges' : 'docRanges'];
     const range = ranges.at(rangeIndex);
     if (!range) {
       return;
@@ -390,7 +390,7 @@ const App: React.FC = () => {
       return;
     }
 
-    const panelClassName = `panel-${rangeType === 'code' ? 'code' : 'document'}`;
+    const panelClassName = `panel-${rangeType === 'code' ? 'code' : 'doc'}`;
     const panelBlock = document.querySelector(`.${panelClassName}`);
     if (!panelBlock) {
       return;
@@ -404,7 +404,7 @@ const App: React.FC = () => {
       }
 
       const contentBlock = fileBlock
-        .querySelector('.code-block');
+        .querySelector('.document-block');
       if (!contentBlock || !(contentBlock instanceof HTMLElement)) {
         return;
       }
@@ -464,6 +464,10 @@ const App: React.FC = () => {
     if (savedAnnotations) {
       try {
         const parsed = JSON.parse(savedAnnotations);
+
+        // compatible with old documentRanges
+        parsed.docRanges = [...(parsed.documentRanges ?? []), ...(parsed.docRanges ?? [])];
+
         setAnnotations(parsed);
         message.success('已加载保存的标注');
       } catch (error) {
@@ -678,7 +682,7 @@ const App: React.FC = () => {
 
           pendingAnnotations.current.push({
             annotationId: newAnnotationId,
-            targetType: 'document',
+            targetType: 'doc',
             range: documentRange
           });
           pendingAnnotations.current.push({
@@ -758,19 +762,18 @@ const App: React.FC = () => {
 
       <Layout>
         <Content className="main-content">
-        <BaseAnnotationTargetPanel
+        <BaseAnnotationDocumentPanel
             files={docFiles}
             onSetFiles={setDocFiles}
-            targetType="document"
+            targetType='doc'
             targetTypeName='文档'
             onUpload={handleCodeUpload}
             onAddToAnnotation={(range, targetType, annotationId, createNew) => handleAddToAnnotation(range, targetType, annotationId, createNew)}
             onRemoveAnnotationRange={(range, targetType, annotationId) => handleRemoveAnnotationRange(range, targetType, annotationId)}
             onRemoveFile={handleDeleteFile}
             annotations={annotations}
-            cssOnPre={{ whiteSpace: 'pre-wrap' }}
           />
-          <BaseAnnotationTargetPanel
+          <BaseAnnotationDocumentPanel
             files={codeFiles}
             onSetFiles={setCodeFiles}
             targetType="code"
@@ -883,7 +886,7 @@ const App: React.FC = () => {
 
 export default App;
 
-function removeRenderedInfo(files: CodeItem[]) {
+function removeRenderedInfo(files: AnnotationDocumentItem[]) {
   for (const f of files) {
     delete f.renderedDocument;
   }

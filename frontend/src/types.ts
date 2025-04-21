@@ -8,16 +8,10 @@ export interface DocumentRange {
   coloredElements?: HTMLElement[];
 }
 
-export interface AnnotationCategory {
-  name: string;
-  documentRanges: DocumentRange[];
-  codeRanges: DocumentRange[];
-}
-
 export interface Annotation {
   id: string;
   category: string;
-  documentRanges: DocumentRange[];
+  docRanges: DocumentRange[];
   codeRanges: DocumentRange[];
   updateTime: string;
   /** Displayed Color, in CSS Hex format, either starting with '#' or not */
@@ -25,12 +19,15 @@ export interface Annotation {
   lighterColor?: string;
 }
 
-export interface CodeItem {
+export interface AnnotationDocumentItem {     // document is not documentation
   id: string;
   name: string;
-  /** Content of the code. All line breaks should be converted to \n to match `range.toString()` in HTML interface. */
+  /** Content of the document, a documentation or code file. All line breaks should be converted to \n to match `range.toString()` in HTML interface. */
   content: string;
   isExpanded: boolean;
+
+  /** Render cache */
   renderedDocument?: RenderedDocument;
+  /** Dynamic cache for range reveal in React render */
   afterRender?: () => void;
 }

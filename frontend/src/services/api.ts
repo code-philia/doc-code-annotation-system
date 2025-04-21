@@ -23,7 +23,7 @@ export const uploadCode = async (file: File) => {
 
 export const createAnnotation = async (data: {
   category: string;
-  documentRanges: { start: number; end: number; content: string }[];
+  docRanges: { start: number; end: number; content: string }[];
   codeRanges: { start: number; end: number; content: string }[];
 }) => {
   const response = await api.post('/api/annotations', data);
@@ -50,4 +50,4 @@ export const generateAIAnnotation = async (data: {
 }) => {
   const response = await api.post('/api/annotations/generate', data);
   return response.data;
-}; 
+};

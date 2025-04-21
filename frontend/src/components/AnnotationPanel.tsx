@@ -103,15 +103,15 @@ const AnnotationItem = ({
             )
         }
         <div className="stats">
-          <div className="stat-tag">文档片段: {annotation.documentRanges.length}</div>
+          <div className="stat-tag">文档片段: {annotation.docRanges.length}</div>
           <div className="stat-tag">代码片段: {annotation.codeRanges.length}</div>
         </div>
       </div>
-      {(annotation.documentRanges.length > 0 || annotation.codeRanges.length > 0) && (
+      {(annotation.docRanges.length > 0 || annotation.codeRanges.length > 0) && (
         <div className="range-preview">
-          {annotation.documentRanges.map((range, index) => (
+          {annotation.docRanges.map((range, index) => (
             <div key={`doc-${index}`} className="preview-content"
-            onClick={() => onReveal('document', index)}>
+            onClick={() => onReveal('doc', index)}>
               {range.content}
             </div>
           ))}

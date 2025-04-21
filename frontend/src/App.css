@@ -94,7 +94,7 @@ body {
 }
 
 /* 文档和代码内容样式 */
-.code-content {
+.document-content {
   position: relative;
   margin-top: 8px;
   padding: 0;
@@ -104,7 +104,7 @@ body {
   overflow: hidden;
 }
 
-.code-content .code-block {
+.document-content .document-block {
   margin: 0;
   max-height: 600px;
   width: 100%;
@@ -112,73 +112,72 @@ body {
   background-color: #f5f2f077;
 }
 
-.code-content .code-block:not(.doc-block) {
+.document-content .document-block:not(.doc-block) {
   padding: 16px;
   white-space: pre;
   font-family: 'Fira Code', 'Consolas', monospace;
 }
 
-.code-content .doc-block {
+.document-content .doc-block {
   padding: 0 16px;
 }
 
-.code-content .doc-block table,
-.code-content .doc-block th,
-.code-content .doc-block td {
+.document-content .doc-block table,
+.document-content .doc-block th,
+.document-content .doc-block td {
   border: 1px solid grey;
   border-collapse: collapse;
 }
 
-.code-content .doc-block td {
+.document-content .doc-block td {
   padding: 1px 3px;
 }
 
 /* 自定义滚动条样式 */
 .document-content::-webkit-scrollbar,
-.code-content::-webkit-scrollbar {
+.document-content::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 .document-content::-webkit-scrollbar-thumb,
-.code-content::-webkit-scrollbar-thumb {
+.document-content::-webkit-scrollbar-thumb {
   background: #ccc;
   border-radius: 4px;
 }
 
 .document-content::-webkit-scrollbar-track,
-.code-content::-webkit-scrollbar-track {
+.document-content::-webkit-scrollbar-track {
   background: #f1f1f1;
   border-radius: 4px;
 }
 
 .document-content::-webkit-scrollbar-corner,
-.code-content::-webkit-scrollbar-corner {
+.document-content::-webkit-scrollbar-corner {
   background: #f1f1f1;
 }
 
-.code-content pre::-webkit-scrollbar {
+.document-content pre::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
-.code-content pre::-webkit-scrollbar-thumb {
+.document-content pre::-webkit-scrollbar-thumb {
   background: #ccc;
   border-radius: 4px;
 }
 
-.code-content pre::-webkit-scrollbar-track {
+.document-content pre::-webkit-scrollbar-track {
   background: #f1f1f1;
   border-radius: 4px;
 }
 
-.code-content pre::-webkit-scrollbar-corner {
+.document-content pre::-webkit-scrollbar-corner {
   background: #f1f1f1;
 }
 
 /* 文件头部样式 */
-.document-header,
-.code-header {
+.document-header {
   display: flex;
   justify-content: space-between;
 
@@ -188,22 +187,21 @@ body {
   transition: all 0.3s;
 }
 
-.document-header:hover,
-.code-header:hover {
+.document-header:hover {
   background: #f8f8f8;
 }
 
-.code-header .delete-icon {
+.document-header .delete-icon {
   color: red;
   opacity: 0;
   transition: all 0.1s;
 }
 
-.code-header .delete-icon.show {
+.document-header .delete-icon.show {
   opacity: 0.3;
 }
 
-.code-header .delete-icon:hover {
+.document-header .delete-icon:hover {
   opacity: 1.0;
 }
 
