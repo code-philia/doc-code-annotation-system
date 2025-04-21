@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Layout, Button, Space, message, Upload, Flex, Modal, Input } from 'antd';
-import { RobotOutlined, DownloadOutlined, QuestionOutlined, SettingOutlined, UploadOutlined } from '@ant-design/icons';
+import { RobotOutlined, DownloadOutlined, QuestionOutlined, SettingOutlined, UploadOutlined, FileAddOutlined } from '@ant-design/icons';
 import AnnotationPanel from './components/AnnotationPanel';
 import { Annotation, AnnotationDocumentItem, DocumentRange } from './types';
 import './App.css';
@@ -78,6 +78,9 @@ const App: React.FC = () => {
   // 帮助对话框
   const [isHelpModalShown, setIsHelpModalShown] = useState(false);
   const [currentHelpModalOption, setCurrentHelpModalOption] = useState('basicUsage');
+
+  // 新标注任务对话框
+  const [isNewAnnotationTaskConfirmationModalShown, setIsNewAnnotationTaskConfirmationModalShown] = useState(false);
 
   const getExistingColorIterable = function* () {
     for (const a of annotations) {
@@ -332,13 +335,13 @@ const App: React.FC = () => {
       ...annotation,
       docRanges: type === 'doc'
         ? annotation.docRanges.filter(r =>
-            r.start !== range.start || r.end !== range.end
-          )
+          r.start !== range.start || r.end !== range.end
+        )
         : annotation.docRanges,
       codeRanges: type === 'code'
         ? annotation.codeRanges.filter(r =>
-            r.start !== range.start || r.end !== range.end
-          )
+          r.start !== range.start || r.end !== range.end
+        )
         : annotation.codeRanges,
       updatedAt: new Date().toISOString(),
     });
@@ -430,7 +433,7 @@ const App: React.FC = () => {
 
         setTimeout(() => {
           for (const element of range.coloredElements!) {
-              element.style.boxShadow = '';
+            element.style.boxShadow = '';
           }
         }, 2000);
       }
@@ -547,6 +550,22 @@ const App: React.FC = () => {
     }
   }, [apiToken]);
 
+  const handleNewAnnotationTask = () => {
+    setIsNewAnnotationTaskConfirmationModalShown(true);
+  }
+
+  const clearAnnotationTask = () => {
+    setDocFiles([]);
+    setCodeFiles([]);
+    setAnnotations([]);
+    setCurrentAnnotation(null);
+  }
+
+  const createNewAnnotationTask = () => {
+    clearAnnotationTask();
+    message.success('已新建标注任务');
+  }
+
   // 手动保存标注数据
   const handleSaveAnnotations = () => {
     try {
@@ -637,9 +656,9 @@ const App: React.FC = () => {
               "Code:\n```\n" + codeContent + "\n```\n\n" +
               "Please abide by the following format in RegEx: `/annotation name: (.+?) document:<label>(.+?)<\/label> code: <label>(.+?)<\/label>/` .\n" +
               "Fill in the annotation name with Chinese. Fill in the content with the original language (Chinese/English). I will extract the result with that." + ""
-              // (annotations.length === 0 ? "" : "Note that there are some existing annotations, do not replicate: " +
-              //   annotations
-              // )
+            // (annotations.length === 0 ? "" : "Note that there are some existing annotations, do not replicate: " +
+            //   annotations
+            // )
           },
           {
             role: "user",
@@ -727,6 +746,11 @@ const App: React.FC = () => {
       <Sider width={64} className="toolbar" theme="light">
         <Flex style={{ height: "100%" }} vertical={true} justify='space-between'>
           <Space direction="vertical" size="middle" style={{ width: '100%', padding: '20px 0', alignItems: 'center' }}>
+            <Button
+              icon={<FileAddOutlined />}
+              onClick={handleNewAnnotationTask}
+              title="新建标注任务"
+            />
             <Upload {...uploadProps}>
               <Button
                 icon={<DownloadOutlined />}
@@ -762,7 +786,7 @@ const App: React.FC = () => {
 
       <Layout>
         <Content className="main-content">
-        <BaseAnnotationDocumentPanel
+          <BaseAnnotationDocumentPanel
             files={docFiles}
             onSetFiles={setDocFiles}
             targetType='doc'
@@ -810,7 +834,7 @@ const App: React.FC = () => {
         <Layout>
           <Sider className="toolbar" width='100px' theme='light'>
             <Space direction='vertical' size='middle' style={{ width: '100%', padding: '20px 12px 20px 0px', alignItems: 'center' }}>
-            {
+              {
                 settingsModalItems.map(x =>
                   <Button
                     color='default'
@@ -879,6 +903,35 @@ const App: React.FC = () => {
             }
           </Content>
         </Layout>
+      </Modal>
+      <Modal
+        title="新建标注任务"
+        open={isNewAnnotationTaskConfirmationModalShown}
+        okText="保存"
+        cancelText="取消"
+        onOk={() => {
+          setIsNewAnnotationTaskConfirmationModalShown(false);
+          handleSaveAnnotations();
+          createNewAnnotationTask();
+        }}
+        onCancel={() => {
+          setIsNewAnnotationTaskConfirmationModalShown(false);
+        }}
+        footer={(_, { OkBtn, CancelBtn }) => (
+          <>
+            <Button
+              onClick={() => {
+                setIsNewAnnotationTaskConfirmationModalShown(false);
+                createNewAnnotationTask();
+              }}
+            >
+              不保存并继续
+            </Button>
+            <OkBtn />
+          </>
+        )}
+      >
+        <p>将清空所有文件和标注。要保存当前标注任务吗？</p>
       </Modal>
     </Layout>
   );
