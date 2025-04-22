@@ -29,7 +29,7 @@
             "port": 9222,
             "request": "attach",
             "type": "chrome",
-            "webRoot": "${workspaceFolder}/frontend/build"
+            "webRoot": "${workspaceFolder}/frontend/configs/electron"
         },
         {
             "name": "Main",
