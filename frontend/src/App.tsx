@@ -7,7 +7,7 @@ import './App.css';
 import type { UploadProps } from 'antd';
 import { computeLighterColor, generateUUID, getRandomColor, RenderedDocument } from 'components/utils';
 import { useCrossViewStateStore } from 'crossViewState';
-import BaseAnnotationDocumentPanel from 'components/BaseAnnotationContentPanel';
+import AnnotationDocumentPanel from 'components/AnnotationContentPanel';
 import OpenAI from "openai";
 
 const { Sider, Content } = Layout;
@@ -794,7 +794,7 @@ const App: React.FC = () => {
 
       <Layout>
         <Content className="main-content">
-          <BaseAnnotationDocumentPanel
+          <AnnotationDocumentPanel
             files={docFiles}
             onSetFiles={setDocFiles}
             targetType='doc'
@@ -805,7 +805,7 @@ const App: React.FC = () => {
             onRemoveFile={handleDeleteFile}
             annotations={annotations}
           />
-          <BaseAnnotationDocumentPanel
+          <AnnotationDocumentPanel
             files={codeFiles}
             onSetFiles={setCodeFiles}
             targetType="code"

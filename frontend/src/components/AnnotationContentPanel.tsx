@@ -11,7 +11,7 @@ import * as api from '../services/api';
 import { AnnotationDocumentItem, DocumentRange, Annotation } from '../types';
 import { ColorSetUp, computeLighterColor, RenderedDocument } from './utils';
 
-interface BaseAnnotationContentPanelProps {
+interface AnnotationContentPanelProps {
   files: AnnotationDocumentItem[];
   targetType: string;
   targetTypeName: string;
@@ -23,7 +23,7 @@ interface BaseAnnotationContentPanelProps {
   onRemoveFile?: (fileId: string, targetType: string) => void;
 }
 
-const BaseAnnotationDocumentPanel: React.FC<BaseAnnotationContentPanelProps> = ({
+const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
   files,
   targetType,
   targetTypeName,
@@ -143,7 +143,7 @@ const BaseAnnotationDocumentPanel: React.FC<BaseAnnotationContentPanelProps> = (
       // 找到当前选中的文件
       const codeElement = range.startContainer.parentElement;
       const codeFileElement = codeElement?.closest('.document-block');
-      const fileId = codeElement?.closest('.code-item')?.getAttribute('data-file-id');
+      const fileId = codeElement?.closest('.document-item')?.getAttribute('data-file-id');
 
       if (!fileId) {
         console.error('Cannot find code file id');
@@ -273,12 +273,6 @@ const BaseAnnotationDocumentPanel: React.FC<BaseAnnotationContentPanelProps> = (
     });
   };
 
-  const handleCancelSelection = () => {
-    setSelectedRange(null);
-    setSelectionPosition(null);
-    window.getSelection()?.removeAllRanges();
-  };
-
   // 渲染内容，包括高亮
   useEffect(() => {
     if (!(contentRef.current)) {
@@ -287,7 +281,7 @@ const BaseAnnotationDocumentPanel: React.FC<BaseAnnotationContentPanelProps> = (
 
     const targetRangesType = targetType === 'code' ? 'codeRanges' : 'docRanges';
 
-    for (const codeItem of contentRef.current.querySelectorAll('.code-item')) {
+    for (const codeItem of contentRef.current.querySelectorAll('.document-item')) {
       const documentId = codeItem.getAttribute('data-file-id');
       const documentBlock = codeItem.querySelector('.document-block');
       if (documentId === null || documentBlock === null || !(documentBlock instanceof HTMLElement)) {
@@ -392,7 +386,7 @@ const BaseAnnotationDocumentPanel: React.FC<BaseAnnotationContentPanelProps> = (
     >
       <div className="panel-content" ref={contentRef}>
         {files.map(file => (
-          <BaseAnnotationDocumentBlock
+          <AnnotationDocumentBlock
             key={file.id}
             file={file}
             targetType={targetType}
@@ -442,7 +436,7 @@ const BaseAnnotationDocumentPanel: React.FC<BaseAnnotationContentPanelProps> = (
   );
 };
 
-interface BaseAnnotationDocumentBlockProps {
+interface AnnotationDocumentBlockProps {
   file: AnnotationDocumentItem;
   targetType: string;
   toggleExpansion: (fileId: string) => void;
@@ -451,58 +445,60 @@ interface BaseAnnotationDocumentBlockProps {
   onContentMouseUp: MouseEventHandler<HTMLDivElement>;
 }
 
-const BaseAnnotationDocumentBlock = ({
+const AnnotationDocumentBlock = ({
   file,
   targetType,
   toggleExpansion,
   onDeleteFile,
   onContentMouseDown,
   onContentMouseUp
-}: BaseAnnotationDocumentBlockProps) => {
-  return (<div key={file.id} className="code-item" data-file-id={file.id}>
-    <Button
-      type="text"
-      onClick={() => toggleExpansion(file.id)}
-      onMouseOver={(e) => e.currentTarget.querySelector('.delete-icon')?.classList.add('show')}
-      onMouseLeave={(e) => e.currentTarget.querySelector('.delete-icon')?.classList.remove('show')}
-      block
-      className="document-header"
-      title={file.name}
-    >
-      {file.isExpanded ? <CaretDownOutlined /> : <CaretRightOutlined />}
-      <div className='file-label'>
-        <div className='file-name'>{file.name}</div>
-        {file.localPath && <div className='file-path' title={file.localPath}>{file.localPath}</div>}
-      </div>
-
-      <DeleteFilled
-        className='delete-icon'
-        onClick={(e) => {
-          onDeleteFile(file.id);
-          e.stopPropagation();
-        }}
-      />
-    </Button>
-    {file.isExpanded && (
-      <div
-        className="document-content"
-        onMouseDown={onContentMouseDown}
-        onMouseUp={onContentMouseUp}
+}: AnnotationDocumentBlockProps) => {
+  return (
+    <div key={file.id} className="document-item" data-file-id={file.id}>
+      <Button
+        type="text"
+        onClick={() => toggleExpansion(file.id)}
+        onMouseOver={(e) => e.currentTarget.querySelector('.delete-icon')?.classList.add('show')}
+        onMouseLeave={(e) => e.currentTarget.querySelector('.delete-icon')?.classList.remove('show')}
+        block
+        className="document-header"
+        title={file.name}
       >
-        {
-          targetType === 'code'
-            ?
-            (<pre
-              className="document-block document-block"
-            />)
-            :
-            (<div
-              className="document-block doc-block"
-            />)
-        }
-      </div>
-    )}
-  </div>)
+        {file.isExpanded ? <CaretDownOutlined /> : <CaretRightOutlined />}
+        <div className='file-label'>
+          <div className='file-name'>{file.name}</div>
+          {file.localPath && <div className='file-path' title={file.localPath}>{file.localPath}</div>}
+        </div>
+
+        <DeleteFilled
+          className='delete-icon'
+          onClick={(e) => {
+            onDeleteFile(file.id);
+            e.stopPropagation();
+          }}
+        />
+      </Button>
+      {file.isExpanded && (
+        <div
+          className="document-content"
+          onMouseDown={onContentMouseDown}
+          onMouseUp={onContentMouseUp}
+        >
+          {
+            targetType === 'code'
+              ?
+              (<pre
+                className="document-block document-block"
+              />)
+              :
+              (<div
+                className="document-block doc-block"
+              />)
+          }
+        </div>
+      )}
+    </div>
+  )
 }
 
-export default BaseAnnotationDocumentPanel;
+export default AnnotationDocumentPanel;
