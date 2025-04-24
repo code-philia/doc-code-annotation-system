@@ -284,12 +284,14 @@ export class RenderedDocument {
       cursor: 'pointer',
       backgroundColor: coloredRange.lighterColor,
       backgroundClip: 'border-box',
-      borderBottom: `2px solid ${coloredRange.color}`,
+      borderBottomColor: `${coloredRange.color}`,     // for table cells, still need to alter border color
+      boxShadow: `0 2px 0 0 ${coloredRange.color}`,   // adding a border without affecting size, https://stackoverflow.com/a/70334638/17760236
+                                                      // FIXME some box shadow will not display for adjacent elements like <li>, only <li> is fixed in CSS by adding a margin-bottom
     };
 
-    const spanColoredStyle: CSSProperties = {
-      marginBottom: '-2px'
-    };
+    // const spanColoredStyle: CSSProperties = {
+    //   marginBottom: '-2px'
+    // };
 
     coloredRange.ranges.forEach((range, rangeIndex) => {
       range.coloredElements = [];
@@ -328,18 +330,59 @@ export class RenderedDocument {
       const getIsRightBorderAtEndAtDepth = (d: number) => rightBorderAtEnd.at(-d);
 
       const addColoredStyle = (element: HTMLElement) => {
+        // // NOTE This is to keep element size while adding a border to it
+
+        // const isInline = window.getComputedStyle(element).getPropertyValue('display');
+        // if (isInline !== 'inline') {
+        //   const originalBorderBottomWidth = getStyleInPixel(element, 'border-bottom-width') ?? 0;
+
+        //   let marginReduce = 0;
+
+        //   // In case of margin collapse
+
+        //   let sib: Element | null = null;
+        //   for (let e: HTMLElement | null = element; e; e = e.parentElement) {
+        //     if ((sib = e.nextElementSibling) && (sib instanceof HTMLElement)) {
+        //       break;
+        //     }
+        //   }
+
+        //   const nextTreeSibling = sib;
+
+        //   if (nextTreeSibling && nextTreeSibling instanceof HTMLElement) {
+        //     const siblingMarginTop = getStyleInPixel(nextTreeSibling, 'margin-top') ?? 0;
+        //     marginReduce = siblingMarginTop - (2 - originalBorderBottomWidth);
+        //     nextTreeSibling.style.marginTop = `${marginReduce}px`
+
+        //     // prevent margin collapsing
+        //     let prevSibling: Element | null = nextTreeSibling.previousElementSibling;
+        //     if (prevSibling && prevSibling instanceof HTMLElement) {
+
+
+        //       const originalMarginBottom = getStyleInPixel(prevSibling, 'margin-bottom') ?? 0;
+        //       marginReduce = originalMarginBottom - (2 - originalBorderBottomWidth);
+        //       prevSibling.style.marginBottom = `${marginReduce}px`
+        //     }
+        //   } else {
+        //     const originalMarginBottom = getStyleInPixel(element, 'margin-bottom') ?? 0;
+        //     marginReduce = originalMarginBottom - (2 - originalBorderBottomWidth);
+        //     element.style.marginBottom = `${marginReduce}px`;
+        //   }
+        // }
+
+
         element.classList.add('annotation-colored-element');
 
         for (const attr in coloredStyle) {
           const _attr = attr as Exclude<keyof CSSStyleDeclaration, 'length' | 'parentRule'>;
           element.style[_attr] = coloredStyle[attr as keyof typeof coloredStyle] as any;
         }
-        if (element instanceof HTMLSpanElement) {
-          for (const attr in spanColoredStyle) {
-            const _attr = attr as Exclude<keyof CSSStyleDeclaration, 'length' | 'parentRule'>;
-            element.style[_attr] = spanColoredStyle[attr as keyof typeof coloredStyle] as any;
-          }
-        }
+        // if (element instanceof HTMLSpanElement) {
+        //   for (const attr in spanColoredStyle) {
+        //     const _attr = attr as Exclude<keyof CSSStyleDeclaration, 'length' | 'parentRule'>;
+        //     element.style[_attr] = spanColoredStyle[attr as keyof typeof coloredStyle] as any;
+        //   }
+        // }
       }
 
       const addHandler = (element: HTMLElement) => {
@@ -380,7 +423,6 @@ export class RenderedDocument {
         coloredText.setAttribute('parse-start', `${documentStartOffset + startOffset}`);
         coloredText.setAttribute('parse-end', `${documentStartOffset + endOffset}`);
         coloredText.textContent = textContent.slice(startOffset, endOffset);
-        doColor(coloredText);
 
         // NOTE while inserting, the original range will immediately be inactivated
         if (textBefore) {
@@ -394,6 +436,8 @@ export class RenderedDocument {
         }
 
         text.remove();
+
+        doColor(coloredText);
 
         return coloredText;
       }
@@ -892,4 +936,16 @@ function getPossibleParsedStartOffset(node: Node) {
   }
 
   return 0;
+}
+
+function getStyleInPixel(element: HTMLElement, styleName: string) {
+  const style = window.getComputedStyle(element);
+  const value = style.getPropertyValue(styleName);
+
+  let valueInPixel = parseInt(value.split('px')?.[0]);
+
+  if (isNaN(valueInPixel)) {
+    return null;
+  }
+  return valueInPixel
 }

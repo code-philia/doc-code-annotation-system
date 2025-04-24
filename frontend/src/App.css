@@ -93,6 +93,10 @@ body {
   padding: 8px 0 0 0;
 }
 
+.document-item li {
+  margin-bottom: 2px;
+}
+
 /* 文档和代码内容样式 */
 .document-content {
   position: relative;
