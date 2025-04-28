@@ -9,7 +9,7 @@ import jschardet from 'jschardet';
 
 import * as api from '../services/api';
 import { AnnotationDocumentItem, DocumentRange, Annotation } from '../types';
-import { ColorSetUp, computeLighterColor, RenderedDocument } from './utils';
+import { ColorSetUp, computeLighterColor, regularizeFileContent, RenderedDocument } from './utils';
 
 interface AnnotationContentPanelProps {
   files: AnnotationDocumentItem[];
@@ -96,11 +96,13 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
       // 上传到服务器
       const result = await api.uploadCode(file);
 
+      content = regularizeFileContent(content);
+
       // 更新本地状态
       const newFile: AnnotationDocumentItem = {
         id: file.url ?? `url-unknown-file-${result.id}`,
         name: file.name,
-        content: content.replace(/\r?\n|\r/g, '\n'),
+        content: content,
         isExpanded: true,
       };
 

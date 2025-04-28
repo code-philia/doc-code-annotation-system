@@ -949,3 +949,18 @@ function getStyleInPixel(element: HTMLElement, styleName: string) {
   }
   return valueInPixel
 }
+
+// File Utils
+
+export function regularizeFileContent(content: string): string {
+  // Use Unix line break
+  content = content.replace(/\r?\n|\r/g, '\n');
+
+  // Remove gremlin zero-width whitespaces (U+200b)
+  content = content.replace(/\u200b/g, '');
+
+  // Split contiguous inline math `$math1$$math2$`
+  content = content.replace(/(?<=\S)\$\$(?=\S)/g, '$ $');
+
+  return content;
+}
