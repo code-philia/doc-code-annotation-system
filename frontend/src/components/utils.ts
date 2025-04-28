@@ -652,6 +652,61 @@ function inlineCode(state: State, node: any) {
   return state.applyData(node, result)
 }
 
+export function code(state: State, node: any) {
+  const value = node.value ? node.value + '\n' : ''
+
+  const text: any = {
+    type: 'element',
+    tagName: 'span',
+    properties: {
+      ['parse-start']: node.position.start.offset + 3,  // Skip ```
+      ['parse-end']: node.position.end.offset - 3       // Skip ```
+    },
+    children: [{
+      type: 'text',
+      value
+    }]
+  }
+
+  state.patch(node, text)
+
+  const properties: any = {}
+  if (node.lang) {
+    properties.className = ['language-' + node.lang]
+  }
+
+  properties['parse-start'] = node.position.start.offset
+  properties['parse-end'] = node.position.end.offset
+
+  const codeElement: any = {
+    type: 'element',
+    tagName: 'code',
+    properties,
+    children: [text]
+  }
+
+  if (node.meta) {
+    codeElement.data = {meta: node.meta}
+  }
+
+  state.patch(node, codeElement)
+  const result = state.applyData(node, codeElement)
+
+  const preElement: any = {
+    type: 'element',
+    tagName: 'pre',
+    properties: {
+      ['parse-start']: node.position.start.offset,
+      ['parse-end']: node.position.end.offset
+    },
+    children: [result]
+  }
+
+  state.patch(node, preElement)
+
+  return preElement
+}
+
 // to process inlineMath and Math type nodes
 function defaultUnknownHandler(state: State, node: any) {
   const data = node.data || {}
@@ -668,7 +723,21 @@ function defaultUnknownHandler(state: State, node: any) {
             ['parse-end']: node.position.end.offset
           },
           children: state.all(node)
-        }
+      }
+
+  // also patch hChildren with parse-start and parse-end
+  const hChildren = node.data.hChildren
+
+  if (
+    hChildren !== null &&
+    hChildren !== undefined
+  ) {
+    for (const c of hChildren) {
+      if (!(c.position)) {
+        c.position = node.position
+      }
+    }
+  }
 
   state.patch(node, result)
   return state.applyData(node, result)
@@ -678,6 +747,7 @@ function defaultUnknownHandler(state: State, node: any) {
 customHandlers.tableRow = tableRowHandler;
 customHandlers.text = text;               // NOTE: Wrapping text node again is the simplest way to handle: '| xxx' in source document could be parsed to 'xxx'
 customHandlers.inlineCode = inlineCode;   // NOTE: Wrapping code node again is the simplest way to handle: '`xxx`' in source document could be parsed to 'xxx'
+customHandlers.code = code;
 
 export async function convertMarkdownWithMathToHTML(markdownText: string) {
   const file = await unified()
