@@ -428,12 +428,13 @@ const App: React.FC = () => {
       // 添加光效
       if (range.coloredElements) {
         for (const element of range.coloredElements) {
+          (element as any).originalBoxShadow = element.style.boxShadow;
           element.style.boxShadow = `0 0 10px ${annotation.color}`;
         }
 
         setTimeout(() => {
           for (const element of range.coloredElements!) {
-            element.style.boxShadow = '';
+            element.style.boxShadow = (element as any).originalBoxShadow ?? '';
           }
         }, 2000);
       }
