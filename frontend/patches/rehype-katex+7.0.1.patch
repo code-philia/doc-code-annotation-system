@@ -1,0 +1,28 @@
+diff --git a/node_modules/rehype-katex/lib/index.js b/node_modules/rehype-katex/lib/index.js
+index 1f858c8..9adbb9b 100644
+--- a/node_modules/rehype-katex/lib/index.js
++++ b/node_modules/rehype-katex/lib/index.js
+@@ -130,9 +130,21 @@ export default function rehypeKatex(options) {
+       }
+ 
+       if (typeof result === 'string') {
+-        const root = fromHtmlIsomorphic(result, {fragment: true})
++        const root = fromHtmlIsomorphic(result, { fragment: true })
++
++        const child = {
++          type: 'element',
++          tagName: 'span',
++          properties: {
++            className: ['parse-math'],
++            ['parse-start']: element.position.start.offset,
++            ['parse-end']: element.position.end.offset
++          },
++          children: root.children
++        }
++
+         // Cast as we don’t expect `doctypes` in KaTeX result.
+-        result = /** @type {Array<ElementContent>} */ (root.children)
++        result = /** @type {Array<ElementContent>} */ [child]
+       }
+ 
+       const index = parent.children.indexOf(scope)

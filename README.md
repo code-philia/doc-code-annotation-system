@@ -3,5 +3,8 @@
 How to run:
 
 ```bash
-cd frontend && npm install && npm run start
+cd frontend
+npm install
+npx patch-package
+npm run start
 ```
