@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, MouseEventHandler } from 'react';
-import { Card, Button, Upload, Modal, message } from 'antd';
+import { Card, Button, Upload, Modal, message, Input } from 'antd';
 import { DownloadOutlined, CaretDownOutlined, CaretRightOutlined, PlusOutlined, DeleteFilled } from '@ant-design/icons';
 import type { UploadFile } from 'antd/es/upload/interface';
 import classNames from 'classnames';
@@ -13,9 +13,10 @@ import { ColorSetUp, computeLighterColor, regularizeFileContent, RenderedDocumen
 
 interface AnnotationContentPanelProps {
   files: AnnotationDocumentItem[];
+  annotations: Annotation[];
+  searchAnnotations: (keyword: string) => Annotation[];
   targetType: string;
   targetTypeName: string;
-  annotations: Annotation[];
   onSetFiles: (files: AnnotationDocumentItem[]) => void;
   onUpload?: (result: { id: string; name: string }) => void;
   onAddToAnnotation?: (range: DocumentRange, targetType: string, annotationId?: string, createNew?: boolean) => void;
@@ -25,9 +26,10 @@ interface AnnotationContentPanelProps {
 
 const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
   files,
+  annotations,
+  searchAnnotations,
   targetType,
   targetTypeName,
-  annotations,
   onSetFiles,
   onUpload,
   onAddToAnnotation,
@@ -159,7 +161,7 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
         // 计算工具栏位置，确保在视口内
         const viewportWidth = window.innerWidth;
         const viewportHeight = window.innerHeight;
-        const toolbarHeight = 48;
+        const toolbarHeight = 80;
         const toolbarWidth = 400;
 
         // 计算初始位置（在选区上方）
@@ -386,6 +388,8 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
       }
       className={classNames('panel', `panel-${targetType}`)}
     >
+      <div className="explorer-view"></div>
+      <div className="editor-view"></div>
       <div className="panel-content" ref={contentRef}>
         {files.map(file => (
           <AnnotationDocumentBlock
@@ -398,41 +402,14 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
             onContentMouseUp={handleCodeSelection}
           />
         ))}
-        {selectedRange && selectionPosition && (
-          <div
-            className="floating-toolbar"
-            style={{
-              top: `${selectionPosition.top}px`,
-              left: `${selectionPosition.left}px`,
-            }}
-          >
-            {annotations.map((annotation) => (
-              <Button
-                key={annotation.id}
-                size="small"
-                type="default"
-                onClick={() => handleAddToAnnotation(annotation.id)}
-                style={{
-                  color: annotation.color ?? '#000000',
-                  outlineColor: annotation.color ?? '#000000',
-                  border: 'none',
-                  backgroundColor: annotation.color ? computeLighterColor(annotation.color) : computeLighterColor('#000000'),
-                  outlineStyle: 'solid'
-                }}
-              >
-                {annotation.category}
-              </Button>
-            ))}
-            <Button
-              size="small"
-              type="dashed"
-              icon={<PlusOutlined />}
-              onClick={() => { handleCreateAndApplyAnnotation(); }}
-              style={{width: '28px'}}
-            >
-            </Button>
-          </div>
-        )}
+        {selectedRange && selectionPosition &&
+          <FloatingToolbar
+            position={{ top: selectionPosition.top, left: selectionPosition.left }}
+            searchAnnotations={searchAnnotations}
+            onAddToAnnotation={handleAddToAnnotation}
+            onCreateAndApplyAnnotation={handleCreateAndApplyAnnotation}
+          ></FloatingToolbar>
+        }
       </div>
     </Card>
   );
@@ -504,5 +481,75 @@ const AnnotationDocumentBlock = ({
     </div>
   )
 }
+
+interface FloatingToolbarProps {
+  position: { top: number; left: number };
+  searchAnnotations: (keyword: string) => Annotation[];
+  onAddToAnnotation: (annotationId?: string) => void;
+  onCreateAndApplyAnnotation: () => void;
+}
+
+const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
+  position,
+  searchAnnotations,
+  onAddToAnnotation,
+  onCreateAndApplyAnnotation,
+}) => {
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+
+  useEffect(() => {
+    setAnnotations(searchAnnotations(''));
+  }, []);
+
+  return (
+    <div
+      className="floating-toolbar"
+      style={{
+        top: `${position.top}px`,
+        left: `${position.left}px`,
+      }}
+    >
+      <Input
+        type="text"
+        placeholder="搜索标注..."
+        onChange={(e) => setAnnotations(searchAnnotations(e.target.value))}
+        className="annotation-search"
+        style={{
+          marginBottom: '8px',
+          padding: '4px 8px',
+          width: '100%',
+          fontSize: '13px',
+          borderColor: '#d9d9d9',
+          boxShadow: 'unset'
+        }}
+      />
+      <div className='floating-toolbar-items'>
+        {annotations.map((annotation) => (
+          <Button
+            key={annotation.id}
+            size="small"
+            type="default"
+            onClick={() => onAddToAnnotation(annotation.id)}
+            style={{
+              color: annotation.color ?? '#000000',
+              borderColor: annotation.color ?? '#000000',
+              borderStyle: 'solid',
+              backgroundColor: annotation.color ? computeLighterColor(annotation.color) : computeLighterColor('#000000'),
+            }}
+          >
+            {annotation.category}
+          </Button>
+        ))}
+        <Button
+          size="small"
+          type="dashed"
+          icon={<PlusOutlined />}
+          onClick={onCreateAndApplyAnnotation}
+          style={{ width: '28px' }}
+        />
+      </div>
+    </div>
+  );
+};
 
 export default AnnotationDocumentPanel;

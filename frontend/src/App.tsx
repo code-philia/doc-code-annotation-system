@@ -66,6 +66,40 @@ const App: React.FC = () => {
   const [currentAnnotation, setCurrentAnnotation] = useState<Annotation | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  const [recentAnnotations, setRecentAnnotations] = useState<Annotation[]>([]);
+
+  const raiseToRecentAnnotation = (annotation: Annotation) => {
+    recentAnnotations.unshift(annotation);
+    setRecentAnnotations(recentAnnotations.slice(0, 3));
+  }
+
+  const searchAnnotations = (keyword: string) => {
+    const limit = 3;
+    let candidate = 0;
+
+    const result: Annotation[] = [];
+
+    const searchArray = (annotations: Annotation[]) => {
+      for (let i = 0; candidate < limit && i < annotations.length; ++i) {
+        const a = annotations[i];
+        if ((!keyword || a.category.includes(keyword)) && !result.includes(a)) {    // if keyword is '' pick it
+          result.push(a);
+          ++candidate;
+        }
+      }
+    }
+
+    searchArray(recentAnnotations);
+
+    if (candidate >= limit) {
+      return result;
+    }
+
+    searchArray(annotations);
+
+    return result;
+  }
+
   // 历史记录状态
   const [history, setHistory] = useState<HistoryState[]>([]);
   const [currentHistoryIndex, setCurrentHistoryIndex] = useState(-1);
@@ -141,6 +175,8 @@ const App: React.FC = () => {
     const matchedAnnotation = updatedAnnotations.find(a => a.id === annotationId);
     if (matchedAnnotation) {
       matchedAnnotation.category = name;
+
+      raiseToRecentAnnotation(matchedAnnotation);
     }
 
     setAnnotations(updatedAnnotations);
@@ -233,6 +269,8 @@ const App: React.FC = () => {
       setShouldFocusOnRename(newAnnotation.id);
     }
 
+    raiseToRecentAnnotation(newAnnotation);
+
     return newAnnotation.id;
   };
 
@@ -293,6 +331,8 @@ const App: React.FC = () => {
 
     const newAnnotations = _annotations.map(a => {
       if (a.id === annotation?.id) {
+        raiseToRecentAnnotation(a);
+
         return {
           ...a,
           docRanges: type === 'doc'
@@ -348,6 +388,8 @@ const App: React.FC = () => {
 
     const newAnnotations = annotations.map(annotation => {
       if (annotation.id === annotationId) {
+        raiseToRecentAnnotation(annotation);
+
         return filterAnnotationRanges(annotation);
       }
       return annotation;
@@ -380,6 +422,8 @@ const App: React.FC = () => {
     if (!annotation) {
       return;
     }
+
+    raiseToRecentAnnotation(annotation);
 
     const ranges = annotation[rangeType === 'code' ? 'codeRanges' : 'docRanges'];
     const range = ranges.at(rangeIndex);
@@ -798,6 +842,7 @@ const App: React.FC = () => {
           <AnnotationDocumentPanel
             files={docFiles}
             onSetFiles={setDocFiles}
+            searchAnnotations={searchAnnotations}
             targetType='doc'
             targetTypeName='文档'
             onUpload={handleCodeUpload}
@@ -809,6 +854,7 @@ const App: React.FC = () => {
           <AnnotationDocumentPanel
             files={codeFiles}
             onSetFiles={setCodeFiles}
+            searchAnnotations={searchAnnotations}
             targetType="code"
             targetTypeName='代码'
             onUpload={handleCodeUpload}
@@ -821,7 +867,7 @@ const App: React.FC = () => {
             annotations={annotations}
             currentAnnotation={currentAnnotation}
             onAnnotationCreate={handleCreateAnnotation}
-            onAnnotationSelect={setCurrentAnnotation}
+            onAnnotationSelect={(annotation) => { setCurrentAnnotation(annotation); raiseToRecentAnnotation(annotation); }}
             onAnnotationDelete={handleDeleteAnnotation}
             onAnnotationRename={handleRenameAnnotation}
             onAnnotationReveal={handleRevealRange}
