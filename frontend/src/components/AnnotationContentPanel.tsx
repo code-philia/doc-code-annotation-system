@@ -428,8 +428,8 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
               type="dashed"
               icon={<PlusOutlined />}
               onClick={() => { handleCreateAndApplyAnnotation(); }}
+              style={{width: '28px'}}
             >
-              新建标注
             </Button>
           </div>
         )}
@@ -466,19 +466,21 @@ const AnnotationDocumentBlock = ({
         className="document-header"
         title={file.name}
       >
-        {file.isExpanded ? <CaretDownOutlined /> : <CaretRightOutlined />}
-        <div className='file-label'>
-          <div className='file-name'>{file.name}</div>
-          {file.localPath && <div className='file-path' title={file.localPath}>{file.localPath}</div>}
-        </div>
+        <div className="document-header-content">
+          {file.isExpanded ? <CaretDownOutlined /> : <CaretRightOutlined />}
+          <div className='file-label'>
+            <div className='file-name'>{file.name}</div>
+            {file.localPath && <div className='file-path' title={file.localPath}>{file.localPath}</div>}
+          </div>
 
-        <DeleteFilled
-          className='delete-icon'
-          onClick={(e) => {
-            onDeleteFile(file.id);
-            e.stopPropagation();
-          }}
-        />
+          <DeleteFilled
+            className='delete-icon'
+            onClick={(e) => {
+              onDeleteFile(file.id);
+              e.stopPropagation();
+            }}
+          />
+        </div>
       </Button>
       {file.isExpanded && (
         <div

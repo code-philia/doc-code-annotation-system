@@ -752,9 +752,9 @@ const App: React.FC = () => {
 
   return (
     <Layout className="app-layout">
-      <Sider width={64} className="toolbar" theme="light">
+      <Sider width={56} className="toolbar" theme="light">
         <Flex style={{ height: "100%" }} vertical={true} justify='space-between'>
-          <Space direction="vertical" size="middle" style={{ width: '100%', padding: '20px 0', alignItems: 'center' }}>
+          <Space direction="vertical" size="middle" style={{ width: '100%', padding: '12px 0', alignItems: 'center' }}>
             <Button
               icon={<FileAddOutlined />}
               onClick={handleNewAnnotationTask}
@@ -778,7 +778,7 @@ const App: React.FC = () => {
               title="AI自动生成标注"
             />
           </Space>
-          <Space direction="vertical" size="middle" style={{ width: '100%', padding: '20px 0', alignItems: 'center' }}>
+          <Space direction="vertical" size="middle" style={{ width: '100%', padding: '12px 0', alignItems: 'center' }}>
             <Button
               icon={<SettingOutlined />}
               onClick={() => { setIsSettingsModalShow(!isSettingsModalShow); }}

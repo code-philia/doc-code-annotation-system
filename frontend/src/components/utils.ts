@@ -214,14 +214,31 @@ export class RenderedDocument {
       if (this.type === 'markdown') {
         this.renderedDocument = await convertMarkdownWithMathToHTML(this.sourceDocument);
       } else {
-        const wrapperSpan = document.createElement('span');
-        wrapperSpan.className = 'parse-wrapper-span';
-        wrapperSpan.setAttribute('parse-start', '0');
-        wrapperSpan.setAttribute('parse-end', `${this.sourceDocument.length}`);
-        wrapperSpan.textContent = this.sourceDocument;
+        const textLines = splitLines(this.sourceDocument, true);
 
-        this.renderedDocument = wrapperSpan.outerHTML;
-        wrapperSpan.remove();
+        let innerHTML = '';
+        let offset = 0;
+        const createWrapperSpan = (line: string) => {
+          line = line.match(/.*?(\r|\r?\n|$)/)?.[0] ?? '';
+
+          const wrapperCode = document.createElement('code');   // FIXME line number of more than 3 digits will not be in good style
+          wrapperCode.className = 'annotation-skip';
+
+          const wrapperSpan = document.createElement('span');
+          wrapperSpan.className = 'parse-wrapper-span';
+          wrapperSpan.setAttribute('parse-start', `${offset}`);
+          wrapperSpan.setAttribute('parse-end', `${offset += line.length}`);
+          wrapperSpan.textContent = line;
+
+          wrapperCode.appendChild(wrapperSpan);
+          innerHTML += wrapperCode.outerHTML;
+
+          wrapperSpan.remove();
+        }
+
+        textLines.forEach(createWrapperSpan);
+
+        this.renderedDocument = innerHTML;
       }
     }
     return this.renderedDocument;
@@ -286,7 +303,7 @@ export class RenderedDocument {
       backgroundClip: 'border-box',
       borderBottomColor: `${coloredRange.color}`,     // for table cells, still need to alter border color
       boxShadow: `0 2px 0 0 ${coloredRange.color}`,   // adding a border without affecting size, https://stackoverflow.com/a/70334638/17760236
-                                                      // FIXME some box shadow will not display for adjacent elements like <li>, only <li> is fixed in CSS by adding a margin-bottom
+      // FIXME some box shadow will not display for adjacent elements like <li>, only <li> is fixed in CSS by adding a margin-bottom
     };
 
     // const spanColoredStyle: CSSProperties = {
@@ -464,7 +481,17 @@ export class RenderedDocument {
           // parent.replaceChildren();   // NOTE While doing this, the range/selection that covers here will immediately be inactivated!
           colorText(currentNode, documentStartOffset);
         } else if (currentNode instanceof HTMLElement) {   // FIXME splitting doesn't work here now
-          if (!(startChild || endChild)) {
+          let shouldColorAll =
+            !currentNode.classList.contains('annotation-skip') &&   // if is each line of code, do not color its ::before element (line number)
+            (
+              !(startChild || endChild) ||                          // if no startChild or endChild is a splitting point of this element
+              !(                                                    // if no startChild at start and no endChild at end
+                (startChild && !startChildAtStart) ||
+                (endChild && !endChildAtEnd)
+              )
+            );
+
+          if (shouldColorAll) {
             doColor(currentNode);
           } else {
             // find start child node
@@ -489,34 +516,26 @@ export class RenderedDocument {
               }
             }
 
-            let shouldColorAll = true;
-            if (startChild && !startChildAtStart) shouldColorAll = false;
-            else if (endChild && !endChildAtEnd) shouldColorAll = false;
+            let currentOffset = documentStartOffset;
 
-            if (shouldColorAll) {
-              doColor(currentNode);
-            } else {
-              let currentOffset = documentStartOffset;
+            for (let j = startIndex; j <= endIndex; j++) {
+              const childNode = childNodes[j];
+              if (isEmptyTextNode(childNode)) continue;
 
-              for (let j = startIndex; j <= endIndex; j++) {
-                const childNode = childNodes[j];
-                if (isEmptyTextNode(childNode)) continue;
+              // add guard for start and end offset, cause we did not check childNode parsed offsets like code in `findPositionFromOffset`
 
-                // add guard for start and end offset, cause we did not check childNode parsed offsets like code in `findPositionFromOffset`
+              let lastOffset: number | null;
+              if (lastOffset = getStartOffset(childNode)) {
+                currentOffset = lastOffset;
+              }
+              colorNode(childNode, depth + 1, j === startIndex && trimStart, j === endIndex && trimEnd, currentOffset);
 
-                let lastOffset: number | null;
-                if (lastOffset = getStartOffset(childNode)) {
-                  currentOffset = lastOffset;
-                }
-                colorNode(childNode, depth + 1, j === startIndex && trimStart, j === endIndex && trimEnd, currentOffset);
-
-                if (lastOffset = getEndOffset(childNode)) {
-                  currentOffset = lastOffset;
-                } else {
-                  currentOffset = currentOffset + (childNode.textContent?.length ?? 0);
-                }
-              };
-            }
+              if (lastOffset = getEndOffset(childNode)) {
+                currentOffset = lastOffset;
+              } else {
+                currentOffset = currentOffset + (childNode.textContent?.length ?? 0);
+              }
+            };
           }
         }
       }
@@ -576,7 +595,7 @@ function tableRowHandler(state: State, node: any, parent: Parents | undefined) {
 
     if (cell) {
       properties['parse-start'] = cell.position.start.offset,
-      properties['parse-end'] = cell.position.end.offset
+        properties['parse-end'] = cell.position.end.offset
     }
 
     /** @type {Element} */
@@ -686,7 +705,7 @@ export function code(state: State, node: any) {
   }
 
   if (node.meta) {
-    codeElement.data = {meta: node.meta}
+    codeElement.data = { meta: node.meta }
   }
 
   state.patch(node, codeElement)
@@ -713,16 +732,16 @@ function defaultUnknownHandler(state: State, node: any) {
   /** @type {HastElement | HastText} */
   const result: any =
     'value' in node &&
-    !(data.hasOwnProperty('hProperties') || data.hasOwnProperty('hChildren'))
-      ? {type: 'text', value: node.value}
+      !(data.hasOwnProperty('hProperties') || data.hasOwnProperty('hChildren'))
+      ? { type: 'text', value: node.value }
       : {
-          type: 'element',
-          tagName: 'div',
-          properties: {
-            ['parse-start']: node.position.start.offset,
-            ['parse-end']: node.position.end.offset
-          },
-          children: state.all(node)
+        type: 'element',
+        tagName: 'div',
+        properties: {
+          ['parse-start']: node.position.start.offset,
+          ['parse-end']: node.position.end.offset
+        },
+        children: state.all(node)
       }
 
   // also patch hChildren with parse-start and parse-end
@@ -822,7 +841,7 @@ export function findPositionFromOffset(offset: number, rootElement: Element, red
     for (; node
       && (!(node instanceof Element) || isWrapperSpan(node))            // is text or wrapper span
       && (                                                              // is the first or last child node of parent
-           (position === 0 && node === node.parentNode?.firstChild)
+        (position === 0 && node === node.parentNode?.firstChild)
         || (position !== 0 && node === node.parentNode?.lastChild)
       )
       ; node = node?.parentNode ?? null);
@@ -847,7 +866,7 @@ export function findPositionFromOffset(offset: number, rootElement: Element, red
       if (0 <= offset - parentStartOffset && offset - parentStartOffset <= getNodeMaxOffset(node)) {
         return [node, offset - parentStartOffset];    // NOTE: '| xxx' in source document could be parsed to 'xxx', but now we wrap each Text Node under such special element with a <span> inside
       }
-    } else if (node instanceof Element) {
+    } else if (node instanceof HTMLElement) {
       // determine offset from the node itself
       parsedStartOffset = getStartOffset(node);
       parsedEndOffset = getEndOffset(node);
@@ -1033,4 +1052,21 @@ export function regularizeFileContent(content: string): string {
   content = content.replace(/(?<=\S)\$\$(?=\S)/g, '$ $');
 
   return content;
+}
+
+// Text Utils
+export function splitLines(text: string, emptyLastLine: boolean = false): string[] {
+  text += '\n';
+  const result = text.match(/.*?(\r|\r?\n)/g);
+
+  if (result === null) {
+    return [];
+  }
+
+  const lastLine = result.pop();
+  if (lastLine && (emptyLastLine || lastLine !== '\n')) {
+    result.push(lastLine.slice(0, -1));
+  }
+
+  return result;
 }
