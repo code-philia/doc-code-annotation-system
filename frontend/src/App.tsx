@@ -79,9 +79,14 @@ const App: React.FC = () => {
 
     const result: Annotation[] = [];
 
-    const searchArray = (annotations: Annotation[]) => {
+    const searchArray = (annotations: Annotation[], refAnnotations?: Annotation[]) => {
       for (let i = 0; candidate < limit && i < annotations.length; ++i) {
         const a = annotations[i];
+
+        if (refAnnotations && !refAnnotations.includes(a)) {
+          return;
+        }
+
         if ((!keyword || a.category.includes(keyword)) && !result.includes(a)) {    // if keyword is '' pick it
           result.push(a);
           ++candidate;
@@ -89,7 +94,7 @@ const App: React.FC = () => {
       }
     }
 
-    searchArray(recentAnnotations);
+    searchArray(recentAnnotations, annotations);
 
     if (candidate >= limit) {
       return result;

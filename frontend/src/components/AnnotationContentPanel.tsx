@@ -37,7 +37,7 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
   onRemoveFile
 }) => {
   const [selectedRange, setSelectedRange] = useState<DocumentRange | null>(null);
-  const [selectionPosition, setSelectionPosition] = useState<{ top: number; left: number } | null>(null);
+  const [selectionRectangle, setSelectionPosition] = useState<DOMRect | null>(null);
 
   const contentRef = useRef<HTMLDivElement | null>(null);
   const cachedSelectedRange = useRef<Range | null>(null);
@@ -158,38 +158,8 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
         // 获取选区的位置
         const rect = range.getBoundingClientRect();
 
-        // 计算工具栏位置，确保在视口内
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
-        const toolbarHeight = 80;
-        const toolbarWidth = 400;
-
-        // 计算初始位置（在选区上方）
-        let top = rect.top - toolbarHeight - 10;
-        let left = rect.left;
-
-        // 如果上方空间不足，则显示在选区下方
-        if (top < 10) {
-          top = rect.bottom + 10;
-        }
-
-        // 确保不超出右边界
-        if (left + toolbarWidth > viewportWidth - 10) {
-          left = viewportWidth - toolbarWidth - 10;
-        }
-
-        // 确保不超出左边界
-        if (left < 10) {
-          left = 10;
-        }
-
-        // 确保不超出底部边界
-        if (top + toolbarHeight > viewportHeight - 10) {
-          top = viewportHeight - toolbarHeight - 10;
-        }
-
         // 设置悬浮位置
-        setSelectionPosition({ top, left });
+        setSelectionPosition(rect);
 
         const targetFile = files.find(f => f.id === fileId);
         if (!targetFile) {
@@ -402,9 +372,9 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
             onContentMouseUp={handleCodeSelection}
           />
         ))}
-        {selectedRange && selectionPosition &&
+        {selectedRange && selectionRectangle &&
           <FloatingToolbar
-            position={{ top: selectionPosition.top, left: selectionPosition.left }}
+            rect={selectionRectangle}
             searchAnnotations={searchAnnotations}
             onAddToAnnotation={handleAddToAnnotation}
             onCreateAndApplyAnnotation={handleCreateAndApplyAnnotation}
@@ -483,71 +453,110 @@ const AnnotationDocumentBlock = ({
 }
 
 interface FloatingToolbarProps {
-  position: { top: number; left: number };
+  rect: DOMRect;
   searchAnnotations: (keyword: string) => Annotation[];
   onAddToAnnotation: (annotationId?: string) => void;
   onCreateAndApplyAnnotation: () => void;
 }
 
 const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
-  position,
+  rect,
   searchAnnotations,
   onAddToAnnotation,
   onCreateAndApplyAnnotation,
 }) => {
-  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [searchValue, setSearchValue] = useState<string>('');
 
-  useEffect(() => {
-    setAnnotations(searchAnnotations(''));
-  }, []);
+  const annotations = searchAnnotations(searchValue);
+
+  const createAnnotationButton = (
+    <Button
+      size="small"
+      type="dashed"
+      icon={<PlusOutlined />}
+      onClick={onCreateAndApplyAnnotation}
+      style={{ width: '28px', flex: 'none' }}
+    />
+  );
+
+  // 计算工具栏位置，确保在视口内
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const toolbarHeight = (annotations.length ? 80 : 48);
+  const toolbarWidth = 400;
+
+  // 计算初始位置（在选区上方）
+  let top = rect.top - toolbarHeight - 10;
+  let left = rect.left;
+
+  // 如果上方空间不足，则显示在选区下方
+  if (top < 10) {
+    top = rect.bottom + 10;
+  }
+
+  // 确保不超出右边界
+  if (left + toolbarWidth > viewportWidth - 10) {
+    left = viewportWidth - toolbarWidth - 10;
+  }
+
+  // 确保不超出左边界
+  if (left < 10) {
+    left = 10;
+  }
+
+  // 确保不超出底部边界
+  if (top + toolbarHeight > viewportHeight - 10) {
+    top = viewportHeight - toolbarHeight - 10;
+  }
 
   return (
     <div
       className="floating-toolbar"
       style={{
-        top: `${position.top}px`,
-        left: `${position.left}px`,
+        top: `${top}px`,
+        left: `${left}px`,
       }}
     >
-      <Input
-        type="text"
-        placeholder="搜索标注..."
-        onChange={(e) => setAnnotations(searchAnnotations(e.target.value))}
-        className="annotation-search"
-        style={{
-          marginBottom: '8px',
-          padding: '4px 8px',
-          width: '100%',
-          fontSize: '13px',
-          borderColor: '#d9d9d9',
-          boxShadow: 'unset'
-        }}
-      />
       <div className='floating-toolbar-items'>
-        {annotations.map((annotation) => (
-          <Button
-            key={annotation.id}
-            size="small"
-            type="default"
-            onClick={() => onAddToAnnotation(annotation.id)}
-            style={{
-              color: annotation.color ?? '#000000',
-              borderColor: annotation.color ?? '#000000',
-              borderStyle: 'solid',
-              backgroundColor: annotation.color ? computeLighterColor(annotation.color) : computeLighterColor('#000000'),
-            }}
-          >
-            {annotation.category}
-          </Button>
-        ))}
-        <Button
-          size="small"
-          type="dashed"
-          icon={<PlusOutlined />}
-          onClick={onCreateAndApplyAnnotation}
-          style={{ width: '28px' }}
+        <Input
+          type="text"
+          placeholder="搜索标注..."
+          onChange={(e) => setSearchValue(e.target.value)}
+          className="annotation-search"
+          style={{
+            padding: '4px 8px',
+            width: '100%',
+            fontSize: '13px',
+            borderColor: '#d9d9d9',
+            boxShadow: 'unset'
+          }}
         />
+        {annotations.length === 0 && createAnnotationButton}
       </div>
+      {
+        annotations.length > 0 &&
+        (<div className='floating-toolbar-items'>
+          {
+            annotations.map((annotation) => (
+              <Button
+                key={annotation.id}
+                size="small"
+                type="default"
+                onClick={() => onAddToAnnotation(annotation.id)}
+                style={{
+                  color: annotation.color ?? '#000000',
+                  borderColor: annotation.color ?? '#000000',
+                  borderStyle: 'solid',
+                  backgroundColor: annotation.color ? computeLighterColor(annotation.color) : computeLighterColor('#000000')
+                }}
+              >
+                {annotation.category}
+              </Button>
+            ))
+          }
+          {createAnnotationButton}
+        </div>)
+      }
     </div>
   );
 };
