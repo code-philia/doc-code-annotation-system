@@ -310,7 +310,7 @@ export class RenderedDocument {
     //   marginBottom: '-2px'
     // };
 
-    coloredRange.ranges.forEach((range, rangeIndex) => {
+    const colorRange = (range: DocumentRange) => {
       range.coloredElements = [];
 
       // line the borders
@@ -543,13 +543,35 @@ export class RenderedDocument {
       const documentStartOffset = getPossibleParsedStartOffset(lca);
 
       colorNode(lca, 1, true, true, documentStartOffset);   // from borderChild.at(-1)
-    });
+    };
+
+    const colorTasks: {
+      w: number,
+      task: () => void
+    }[] = [];
+
+    coloredRange.ranges.forEach((range) => colorTasks.push({
+      w: range.content.length,
+      task: () => colorRange(range)
+    }));
+
+    return colorTasks;
   }
 
   colorAll(rootElement: HTMLElement, coloredRanges: ColorSetUp[]) {
+    const colorTasks: {
+      w: number,
+      task: () => void
+    }[] = [];
+
     coloredRanges.forEach((color, index) => {
-      this.colorOne(rootElement, color);
+      const colorSetUpTasks = this.colorOne(rootElement, color);
+      colorTasks.push(...colorSetUpTasks);
     });
+
+    colorTasks.sort((a, b) => b.w - a.w);
+
+    colorTasks.forEach(c => c.task());
   }
 }
 

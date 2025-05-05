@@ -318,21 +318,21 @@ const App: React.FC = () => {
       : annotation.codeRanges;
 
     if (hasOverlappingRange(range, existingRanges)) {
-      message.warning('该范围与现有标注重叠，请选择其他范围');
+      message.warning('该范围与同一标注范围重叠，请选择其他范围');
       return;
     }
 
-    // 检查是否与其他标注的范围重叠
-    const hasOverlapWithOther = _annotations.some(a => {
-      if (a.id === annotation?.id) return false;
-      const ranges = type === 'doc' ? a.docRanges : a.codeRanges;
-      return hasOverlappingRange(range, ranges);
-    });
+    // // 检查是否与其他标注的范围重叠
+    // const hasOverlapWithOther = _annotations.some(a => {
+    //   if (a.id === annotation?.id) return false;
+    //   const ranges = type === 'doc' ? a.docRanges : a.codeRanges;
+    //   return hasOverlappingRange(range, ranges);
+    // });
 
-    if (hasOverlapWithOther) {
-      message.warning('该范围与其他标注重叠，请选择其他范围');
-      return;
-    }
+    // if (hasOverlapWithOther) {
+    //   message.warning('该范围与其他标注重叠，请选择其他范围');
+    //   return;
+    // }
 
     const newAnnotations = _annotations.map(a => {
       if (a.id === annotation?.id) {

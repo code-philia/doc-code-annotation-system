@@ -289,7 +289,16 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
               lighterColor: a.lighterColor ?? 'rgba(103, 103, 103, 0.1)',
               ranges: a[targetRangesType]
                 .filter(r => r.documentId === documentId),
-              handleClick: (e: MouseEvent, range: DocumentRange) => onRemoveAnnotationRange?.(range, targetType, a.id)
+              handleClick: (e: MouseEvent, range: DocumentRange) => {
+                const selection = window.getSelection();
+                const emptySelection = !selection || selection.isCollapsed || selection.toString().trim() === '';
+                if (!emptySelection) {
+                  return;
+                }
+
+                onRemoveAnnotationRange?.(range, targetType, a.id);
+                e.stopPropagation();  // one update only allow one delete
+              }
             }
           })
           .flatMap(a =>       // each click event should cancel one colored range only, so flat them
