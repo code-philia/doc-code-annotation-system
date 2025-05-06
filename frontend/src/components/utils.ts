@@ -266,8 +266,8 @@ export class RenderedDocument {
       limitedRange.setEnd(range.endContainer, range.endOffset);
     }
 
-    const startOffset = findOffsetFromPosition(limitedRange.startContainer, limitedRange.startOffset, rootElement);
-    const endOffset = findOffsetFromPosition(limitedRange.endContainer, limitedRange.endOffset, rootElement);
+    const startOffset = findOffsetFromPosition(limitedRange.startContainer, limitedRange.startOffset, rootElement, 'start');
+    const endOffset = findOffsetFromPosition(limitedRange.endContainer, limitedRange.endOffset, rootElement, 'end');
 
     if (startOffset === null || endOffset === null) {
       return [0, 0];
@@ -817,12 +817,13 @@ export async function convertMarkdownWithMathToHTML(markdownText: string) {
 
 /**
  * Calculate the offset in the source text from an HTML position (the start or end of an HTML range), based on `parse-start` and `parse-end` attributes.
- * @param container The node of the HTML position.
- * @param offset The offset from container node of the HTML position.
- * @param rootElement The rootElement to
+ * @param container     The node of the HTML position.
+ * @param offset        The offset from container node of the HTML position.
+ * @param rootElement   The rootElement as an outer border to calculate from.
+ * @param reduce        To reduce to the border of math element, 'start', 'end', null
  * @returns
  */
-export function findOffsetFromPosition(container: Node, offset: number, rootElement: Element): number | null {
+export function findOffsetFromPosition(container: Node, offset: number, rootElement: Element, reduce: 'start' | 'end' | null = null): number | null {
   let node: Node | null = container;
   for (; node; node = node.parentNode) {
     let parseStart: string | null;
@@ -835,9 +836,23 @@ export function findOffsetFromPosition(container: Node, offset: number, rootElem
       let i = parseInt(parseStart);
       let j = parseInt(parseEnd);
       if (!Number.isNaN(i) && !Number.isNaN(j)) {
+        // reduce to the start or end of math element
+        if (node.classList.contains('parse-math')) {
+          if (reduce === 'start') {
+            return i;
+          }
+          if (reduce === 'end') {
+            return j;
+          }
+        }
+
         const _offset = getCaretCharacterOffsetWithin(container, offset, node);
-        return _offset === null ? null : j - ((node.textContent?.length ?? 0) - _offset);   // NOTE <td> parse-start will start from '| xxx' in source document
+
+        if (offset === 0) return i;
+
+        // NOTE <td> parse-start will start from '| xxx' in source document
         // NOTE do not use getTextContentBytesLength here because it is the length as string in sourceDocument
+        return _offset === null ? null : j - ((node.textContent?.length ?? 0) - _offset);
       }
     }
 
@@ -1077,6 +1092,7 @@ export function regularizeFileContent(content: string): string {
 }
 
 // Text Utils
+
 export function splitLines(text: string, emptyLastLine: boolean = false): string[] {
   text += '\n';
   const result = text.match(/.*?(\r|\r?\n)/g);
