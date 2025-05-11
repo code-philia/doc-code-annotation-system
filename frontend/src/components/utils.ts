@@ -209,10 +209,35 @@ export class RenderedDocument {
     this.type = type;
   }
 
-  async render(): Promise<string> {
+  async render(localResourceBasePath?: string): Promise<string> {
     if (this.renderedDocument === undefined) {
       if (this.type === 'markdown') {
         this.renderedDocument = await convertMarkdownWithMathToHTML(this.sourceDocument);
+
+        // process image resources
+        if (window.localFunctionality && localResourceBasePath) {
+          const documentBlock = document.createElement('div');
+          documentBlock.innerHTML = this.renderedDocument;
+
+          const imageElements = documentBlock.querySelectorAll('img');
+
+          for (const img of imageElements) {
+            const src = img.getAttribute('src');
+            if (src && !src.startsWith('data:')) {
+              const response = await window.localFunctionality.retrieveLocalResource(localResourceBasePath, src);
+              if (response) {
+                const base64String = Buffer.from(response).toString('base64');
+                const dataUrl = `data:image/png;base64,${base64String}`;
+                img.setAttribute('src', dataUrl);
+              } else {
+                console.warn('render: cannot read image', localResourceBasePath, src);
+              }
+            }
+          }
+
+          this.renderedDocument = documentBlock.innerHTML;
+          documentBlock.remove();
+        }
       } else {
         const textLines = splitLines(this.sourceDocument, true);
 

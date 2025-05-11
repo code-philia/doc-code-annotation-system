@@ -81,7 +81,7 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
             headers: {
               'Content-Type': 'application/octet-stream'
             },
-            body: contentBytesBuffer,
+            body: contentBytes,
           });
 
           if (!response.ok) {
@@ -134,7 +134,8 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
 
   const handleCodeSelection = async () => {
     const selection = window.getSelection();
-    if (!selection || selection.isCollapsed || selection.toString().trim() === '') {
+    if (!selection || selection.isCollapsed) {
+      console.log('selection is empty', selection);
       setSelectedRange(null);
       setSelectionPosition(null);
       return;
@@ -149,17 +150,21 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
       const codeFileElement = codeElement?.closest('.document-block');
       const fileId = codeElement?.closest('.document-item')?.getAttribute('data-file-id');
 
+      console.log('elements', codeElement, codeFileElement, fileId);
+
       if (!fileId) {
         console.error('Cannot find code file id');
         return;
       }
 
-      if (content && contentRef.current) {
+      if (contentRef.current) {
         // 获取选区的位置
         const rect = range.getBoundingClientRect();
 
         // 设置悬浮位置
         setSelectionPosition(rect);
+
+        console.log('set rect', rect);
 
         const targetFile = files.find(f => f.id === fileId);
         if (!targetFile) {
@@ -273,7 +278,7 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
         }
 
         const r = targetFile.renderedDocument;
-        documentBlock.innerHTML = await r.render();
+        documentBlock.innerHTML = await r.render(targetFile.localPath);
 
         // calculate ranges
         const coloredRanges: ColorSetUp[] = annotations

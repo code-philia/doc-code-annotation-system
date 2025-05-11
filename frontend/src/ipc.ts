@@ -4,6 +4,7 @@
 
 export interface LocalFunctionality {
     wordDocumentResolve: (content: ArrayBuffer) => Promise<string | undefined>;
+    retrieveLocalResource: (localResourceUrl: string, ...paths: string[]) => Promise<Uint8Array | undefined>;
 }
 
 declare global {

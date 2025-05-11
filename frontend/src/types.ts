@@ -19,16 +19,30 @@ export interface Annotation {
   lighterColor?: string;
 }
 
-export interface AnnotationDocumentItem {     // document is not documentation
+export interface AnnotationDocumentItem {     // document is not documentation, it could be documentation or code
+  /** Annotation task scope unique id of this annotation content. */
   id: string;
+  /** Display name of the annotation content. */
   name: string;
   /** Content of the document, a documentation or code file. All line breaks should be converted to \n to match `range.toString()` in HTML interface. */
   content: string;
-  isExpanded: boolean;
+  /** Optional local path, which is only available in Electron build. */
   localPath?: string;
+  /** Optional attached resources such as images, which is only available in Electron build. */
+  resources?: {
+    /** Type of a resource, probably MIME type in practical use. */
+    type: string;
+    /** Identification used path, for reference from the document. */
+    path: string;
+    /** Optional data, with format related to `type`. */
+    data?: any;
+  }[];
 
-  /** Render cache */
+  /** If is expanded in UI in runtime. */
+  isExpanded: boolean;
+
+  /** Render cache. */
   renderedDocument?: RenderedDocument;
-  /** Dynamic cache for range reveal in React render */
+  /** Dynamic cache for range reveal in React render. */
   afterRender?: () => void;
 }

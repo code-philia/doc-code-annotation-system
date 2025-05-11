@@ -158,6 +158,10 @@ body {
   padding: 1px 3px;
 }
 
+.document-content .doc-block img {
+  width: 100%;
+}
+
 /* 自定义滚动条样式 */
 .document-content::-webkit-scrollbar,
 .document-content::-webkit-scrollbar {
