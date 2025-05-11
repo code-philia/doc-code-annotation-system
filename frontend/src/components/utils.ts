@@ -200,44 +200,62 @@ export interface ColorSetUp {
 }
 
 export class RenderedDocument {
-  readonly sourceDocument: string;
+  sourceDocument: string;
   renderedDocument: string | undefined;
+  localResourceBasePath: string | undefined;
   type: 'markdown' | 'code';
 
-  constructor(sourceDocument: string, type: 'markdown' | 'code') {
+  constructor(sourceDocument: string, type: 'markdown' | 'code', localResourceBasePath?: string) {
     this.sourceDocument = sourceDocument;
     this.type = type;
+    this.localResourceBasePath = localResourceBasePath;
   }
 
-  async render(localResourceBasePath?: string): Promise<string> {
+  async resolveLocalResources(): Promise<string> {
+    // replace image url with data immediately
+    if (this.type === 'markdown' && window.localFunctionality && this.localResourceBasePath) {
+      const regex = /!\[.*?\]\((.*?)\)|<img.*?src="(.*?)".*?>/g;    // left and right (.*?) are two different groups
+
+      const retrieveDataAsBase64 = async (src: string) => {
+        const response = await window.localFunctionality.retrieveLocalResource(this.localResourceBasePath!, src);
+        if (response) {
+          const base64String = Buffer.from(response).toString('base64');
+          return base64String;
+        } else {
+          console.warn('render: cannot read image', this.localResourceBasePath, src);
+          return undefined;
+        }
+      };
+
+      // https://stackoverflow.com/a/73891404/17760236
+      async function replaceAsync(string: string, regexp: RegExp, replacerFunction: (...args: any[]) => Promise<string>) {
+        const replacements = await Promise.all(
+          Array.from(string.matchAll(regexp),
+            match => replacerFunction(...match)));
+        let i = 0;
+        return string.replace(regexp, () => replacements[i++]);
+      }
+
+      this.sourceDocument = await replaceAsync(this.sourceDocument, regex, async (match, p1, p2) => {
+        const src = (p1 ?? p2).trim();
+        if (src && !src.startsWith('data:')) {
+          const dataAsBase64 = await retrieveDataAsBase64(src);
+          if (dataAsBase64) {
+            const dataUrl = `data:image/png;base64,${dataAsBase64}`;
+            return p1 ? match.replace(src, dataUrl) : `![](${dataUrl})`;
+          }
+        }
+        return match;
+      });
+    }
+
+    return this.sourceDocument;
+  }
+
+  async render(): Promise<string> {
     if (this.renderedDocument === undefined) {
       if (this.type === 'markdown') {
         this.renderedDocument = await convertMarkdownWithMathToHTML(this.sourceDocument);
-
-        // process image resources
-        if (window.localFunctionality && localResourceBasePath) {
-          const documentBlock = document.createElement('div');
-          documentBlock.innerHTML = this.renderedDocument;
-
-          const imageElements = documentBlock.querySelectorAll('img');
-
-          for (const img of imageElements) {
-            const src = img.getAttribute('src');
-            if (src && !src.startsWith('data:')) {
-              const response = await window.localFunctionality.retrieveLocalResource(localResourceBasePath, src);
-              if (response) {
-                const base64String = Buffer.from(response).toString('base64');
-                const dataUrl = `data:image/png;base64,${base64String}`;
-                img.setAttribute('src', dataUrl);
-              } else {
-                console.warn('render: cannot read image', localResourceBasePath, src);
-              }
-            }
-          }
-
-          this.renderedDocument = documentBlock.innerHTML;
-          documentBlock.remove();
-        }
       } else {
         const textLines = splitLines(this.sourceDocument, true);
 

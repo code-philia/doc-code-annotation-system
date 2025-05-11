@@ -231,6 +231,7 @@ body {
 }
 
 .document-header .file-name {
+  height: 20px;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;

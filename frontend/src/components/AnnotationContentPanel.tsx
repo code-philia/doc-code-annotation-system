@@ -135,7 +135,6 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
   const handleCodeSelection = async () => {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed) {
-      console.log('selection is empty', selection);
       setSelectedRange(null);
       setSelectionPosition(null);
       return;
@@ -143,14 +142,11 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
 
     try {
       const range = selection.getRangeAt(0);
-      const content = range.toString().trim();
 
       // 找到当前选中的文件
       const codeElement = range.startContainer.parentElement;
       const codeFileElement = codeElement?.closest('.document-block');
       const fileId = codeElement?.closest('.document-item')?.getAttribute('data-file-id');
-
-      console.log('elements', codeElement, codeFileElement, fileId);
 
       if (!fileId) {
         console.error('Cannot find code file id');
@@ -164,14 +160,12 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
         // 设置悬浮位置
         setSelectionPosition(rect);
 
-        console.log('set rect', rect);
-
         const targetFile = files.find(f => f.id === fileId);
         if (!targetFile) {
           return;
         }
         if (!(targetFile.renderedDocument)) {
-          targetFile.renderedDocument = new RenderedDocument(targetFile.content, targetType === 'code' ? 'code' : 'markdown');
+          return;
         }
 
         const f = targetFile.content;
@@ -274,11 +268,12 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
 
       (async () => {
         if (!(targetFile.renderedDocument)) {
-          targetFile.renderedDocument = new RenderedDocument(targetFile.content, targetType === 'code' ? 'code' : 'markdown');  // FIXME Same logic as above
+          targetFile.renderedDocument = new RenderedDocument(targetFile.content, targetType === 'code' ? 'code' : 'markdown', targetFile.localPath);  // FIXME Same logic as above
+          targetFile.content = await targetFile.renderedDocument.resolveLocalResources();
         }
 
         const r = targetFile.renderedDocument;
-        documentBlock.innerHTML = await r.render(targetFile.localPath);
+        documentBlock.innerHTML = await r.render();
 
         // calculate ranges
         const coloredRanges: ColorSetUp[] = annotations

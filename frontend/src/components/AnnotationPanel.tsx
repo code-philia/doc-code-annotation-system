@@ -112,7 +112,7 @@ const AnnotationItem = ({
           {annotation.docRanges.map((range, index) => (
             <div key={`doc-${index}`} className="preview-content"
             onClick={() => onReveal('doc', index)}>
-              {range.content}
+              {range.content.replace(/!\[.*?\]\((.*?)\)/g, `![image](data:image/png;base64)`)}
             </div>
           ))}
           {annotation.codeRanges.map((range, index) => (

@@ -461,9 +461,9 @@ const App: React.FC = () => {
         return;
       }
 
-      let rd = file.renderedDocument;
+      let rd = file.renderedDocument!;
       if (!rd) {
-        rd = file.renderedDocument = new RenderedDocument(file.content, rangeType === 'code' ? 'code' : 'markdown');
+        return;
       }
 
       const htmlRange = rd.getTargetDocumentRange(contentBlock, range.start, range.end);
@@ -575,15 +575,15 @@ const App: React.FC = () => {
 
   useEffect(() => {
     try {
-      const _docFiles = Array.from(docFiles);
-      const _codeFiles = Array.from(codeFiles);
+      const _docFiles = docFiles.map(file => ({ ...file }));
+      const _codeFiles = codeFiles.map(file => ({ ...file }));
 
       removeRenderedInfo(_docFiles);
       removeRenderedInfo(_codeFiles);
 
       localStorage.setItem('annotationTargetFiles', JSON.stringify({
-        docFiles: docFiles,
-        codeFiles: codeFiles
+        docFiles: _docFiles,
+        codeFiles: _codeFiles
       }));
     } catch (error) {
       console.error('Failed to save doc and code:', error);
