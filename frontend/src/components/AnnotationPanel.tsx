@@ -7,6 +7,7 @@ import { computeLighterColor } from './utils';
 import { useCrossViewStateStore } from 'crossViewState';
 
 interface AnnotationItemProps {
+  className?: string;
   annotation: Annotation;
   selected: boolean;
   onClick: () => void;
@@ -27,6 +28,7 @@ interface AnnotationPanelProps {
 }
 
 const AnnotationItem = ({
+  className,
   annotation,
   selected,
   onClick,
@@ -54,7 +56,7 @@ const AnnotationItem = ({
 
   return (
     <div
-      className={`annotation-item ${selected ? 'selected' : ''}`}
+      className={`annotation-item${selected ? ' selected' : ''}${className ? ` ${className}` : ''}`}
       onClick={onClick}
       style={{
         outlineColor: annotation.color ?? '#000000',
@@ -110,13 +112,13 @@ const AnnotationItem = ({
       {(annotation.docRanges.length > 0 || annotation.codeRanges.length > 0) && (
         <div className="range-preview">
           {annotation.docRanges.map((range, index) => (
-            <div key={`doc-${index}`} className="preview-content"
+            <div key={`doc-${index}`} className={`preview-content doc-content doc-range-${index}`}
             onClick={() => onReveal('doc', index)}>
               {range.content.replace(/!\[.*?\]\((.*?)\)/g, `![image](data:image/png;base64)`)}
             </div>
           ))}
           {annotation.codeRanges.map((range, index) => (
-            <div key={`code-${index}`} className="preview-content"
+            <div key={`code-${index}`} className={`preview-content code-content code-range-${index}`}
             onClick={() => onReveal('code', index)}>
               {range.content}
             </div>
@@ -175,9 +177,10 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
       <div className="panel-content">
         <List
           dataSource={annotations}
-          renderItem={(annotation) => (
+          renderItem={(annotation, index) => (
             <List.Item>
               <AnnotationItem
+                className = {`annotation-item-${annotation.id}`}
                 annotation={annotation}
                 selected={currentAnnotation?.id === annotation.id}
                 onClick={() => onAnnotationSelect?.(annotation)}

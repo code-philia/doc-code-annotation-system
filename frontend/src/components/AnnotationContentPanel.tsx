@@ -29,6 +29,7 @@ interface AnnotationContentPanelProps {
   onSetFiles: (filesOrUpdater: AnnotationDocumentItem[] | ((currentFiles: AnnotationDocumentItem[]) => AnnotationDocumentItem[])) => void; // Allow functional updates
   onUpload?: (result: { id: string; name: string }) => void;
   onAddToAnnotation?: (range: DocumentRange, targetType: string, annotationId?: string, createNew?: boolean) => void;
+  onRevealAnnotationRange?: (annotationId: string, targetType: string, rangeIndex: number) => void;
   onRemoveAnnotationRange?: (range: DocumentRange, targetType: string, annotationId: string) => void;
   onRemoveFile?: (fileId: string, targetType: string) => void; // This might need to handle multiple file IDs for folder deletion
   onRemoveFiles?: (fileIds: string[], targetType: string) => void; // New prop for removing multiple files (e.g., from a folder)
@@ -43,6 +44,7 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
   onSetFiles,
   onUpload,
   onAddToAnnotation,
+  onRevealAnnotationRange,
   onRemoveAnnotationRange,
   onRemoveFile, // Keep for single file deletion logic if still used directly
   onRemoveFiles // Use this for folder deletion cleanup
@@ -627,7 +629,11 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
 
               // Filter for valid ranges in the current document that have a string ID
               const validRangesInDocument = rangesFromAnnotation
-                .filter((range): range is DocumentRange & { id: string } => // Type guard to ensure range.id is string
+                .map((range, index) => {
+                  (range as DocumentRange & { index?: number; }).index = index;
+                  return range;
+                })
+                .filter((range): range is DocumentRange & { id: string; index: number; } => // Type guard to ensure range.id is string
                   range.documentId === selectedFileId
                 );
 
@@ -643,9 +649,16 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
                   lighterColor: computeLighterColor(annotationColor),
                   id: annotation.id, // This is the Annotation ID
                   ranges: [docRange], // The specific range segment
-                  handleClick: (e, docRange) => {
+                  handleClick: (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onRevealAnnotationRange?.(annotation.id, targetType, docRange.index);
+                  },
+                  handleRightClick: (e, docRange) => {
                     // clickedRangeId is docRange.id.
                     // The 'docRange' object (full DocumentRange) is captured in this closure.
+                    e.preventDefault();
+                    e.stopPropagation();
                     onRemoveAnnotationRange?.(docRange, targetType, annotation.id);
                   }
                 };

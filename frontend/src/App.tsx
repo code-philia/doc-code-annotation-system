@@ -199,8 +199,6 @@ const App: React.FC = () => {
         docRanges: annotation.docRanges.filter(range => range.documentId !== fileId),
       }));
       setAnnotations(updatedAnnotations);
-
-      message.success('文档已删除');
     } else if (targetType === 'code') {
       const updatedCodeFiles = codeFiles.filter(file => file.id !== fileId);
       setCodeFiles(updatedCodeFiles);
@@ -211,8 +209,6 @@ const App: React.FC = () => {
         codeRanges: annotation.codeRanges.filter(range => range.documentId !== fileId),
       }));
       setAnnotations(updatedAnnotations);
-
-      message.success('代码已删除');
     }
   };
 
@@ -474,6 +470,7 @@ const App: React.FC = () => {
       // 添加光效
       if (range.coloredElements) {
         for (const element of range.coloredElements) {
+          console.log('color elements', range.coloredElements);
           (element as any).originalBoxShadow = element.style.boxShadow;
           element.style.boxShadow = `0 0 10px ${annotation.color}`;
         }
@@ -488,7 +485,7 @@ const App: React.FC = () => {
       // 范围居中
       const rangeRect = htmlRange.getBoundingClientRect();
       const blockRect = editorBlock.getBoundingClientRect();
-      const scrollTop = editorBlock.scrollTop + rangeRect.top - blockRect.top - (editorBlock.clientHeight - rangeRect.height) / 2;
+      const scrollTop = editorBlock.scrollTop + rangeRect.top - blockRect.top - editorBlock.clientHeight / 2;
 
       editorBlock.scrollTo({
         top: scrollTop,
@@ -501,7 +498,15 @@ const App: React.FC = () => {
     setFiles(files.map(_file =>
       _file === file ? { ..._file, isNewlySelectedInPanel: true, afterRender: revealRange } : _file // Changed isExpanded to isNewlySelectedInPanel
     ));
+  }
 
+  const handleRevealRangeFromAnnotations = (annotationId: string, rangeType: string, rangeIndex: number) => {
+    const annotationPanel = document.querySelector('.annotation-panel');
+    const annotationItem = annotationPanel?.querySelector(`.annotation-item-${annotationId}`);
+    if (annotationItem) {
+      setCurrentAnnotation(annotations.find(a => a.id === annotationId) ?? null);
+      annotationItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
   }
 
   // 加载保存的标注数据
@@ -849,6 +854,7 @@ const App: React.FC = () => {
             targetTypeName='文档'
             onUpload={handleCodeUpload}
             onAddToAnnotation={(range, targetType, annotationId, createNew) => handleAddToAnnotation(range, targetType, annotationId, createNew)}
+            onRevealAnnotationRange={handleRevealRangeFromAnnotations}
             onRemoveAnnotationRange={(range, targetType, annotationId) => handleRemoveAnnotationRange(range, targetType, annotationId)}
             onRemoveFile={handleDeleteFile}
             annotations={annotations}
@@ -861,6 +867,7 @@ const App: React.FC = () => {
             targetTypeName='代码'
             onUpload={handleCodeUpload}
             onAddToAnnotation={(range, targetType, annotationId, createNew) => handleAddToAnnotation(range, targetType, annotationId, createNew)}
+            onRevealAnnotationRange={handleRevealRangeFromAnnotations}
             onRemoveAnnotationRange={(range, targetType, annotationId) => handleRemoveAnnotationRange(range, targetType, annotationId)}
             onRemoveFile={handleDeleteFile}
             annotations={annotations}
