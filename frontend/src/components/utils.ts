@@ -217,7 +217,7 @@ export class RenderedDocument {
       const regex = /!\[.*?\]\((.*?)\)|<img.*?src="(.*?)".*?>/g;    // left and right (.*?) are two different groups
 
       const retrieveDataAsBase64 = async (src: string) => {
-        const response = await window.localFunctionality.retrieveLocalResource(this.localResourceBasePath!, src);
+        const response = await window.localFunctionality!.retrieveLocalResource(this.localResourceBasePath!, src);
         if (response) {
           const base64String = Buffer.from(response).toString('base64');
           return base64String;
@@ -283,6 +283,14 @@ export class RenderedDocument {
 
         this.renderedDocument = innerHTML;
       }
+    }
+    return this.renderedDocument;
+  }
+
+  async renderWithLocalResource(): Promise<string> {
+    if (this.renderedDocument === undefined) {
+      await this.resolveLocalResources();
+      this.renderedDocument = await this.render();
     }
     return this.renderedDocument;
   }

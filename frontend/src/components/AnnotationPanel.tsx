@@ -168,7 +168,6 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
           icon={<PlusOutlined />}
           onClick={() => onAnnotationCreate?.()}
         >
-          新建标注
         </Button>
       }
       className={classNames('panel', className)}

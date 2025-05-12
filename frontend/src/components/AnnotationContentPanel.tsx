@@ -1,6 +1,15 @@
-import React, { useState, useRef, useEffect, MouseEventHandler } from 'react';
-import { Card, Button, Upload, Modal, message, Input } from 'antd';
-import { DownloadOutlined, CaretDownOutlined, CaretRightOutlined, PlusOutlined, DeleteFilled } from '@ant-design/icons';
+import React, { useState, useRef, useEffect, MouseEventHandler, useCallback } from 'react';
+import { Card, Button, Upload, message, Modal, Input } from 'antd';
+import {
+  DownloadOutlined,
+  FolderOpenOutlined,
+  FolderOutlined,
+  FileTextOutlined,
+  DeleteFilled,
+  ClearOutlined,
+  PlusOutlined,
+  FileOutlined
+} from '@ant-design/icons';
 import type { UploadFile } from 'antd/es/upload/interface';
 import classNames from 'classnames';
 import Prism from 'prismjs';
@@ -17,11 +26,12 @@ interface AnnotationContentPanelProps {
   searchAnnotations: (keyword: string) => Annotation[];
   targetType: string;
   targetTypeName: string;
-  onSetFiles: (files: AnnotationDocumentItem[]) => void;
+  onSetFiles: (filesOrUpdater: AnnotationDocumentItem[] | ((currentFiles: AnnotationDocumentItem[]) => AnnotationDocumentItem[])) => void; // Allow functional updates
   onUpload?: (result: { id: string; name: string }) => void;
   onAddToAnnotation?: (range: DocumentRange, targetType: string, annotationId?: string, createNew?: boolean) => void;
   onRemoveAnnotationRange?: (range: DocumentRange, targetType: string, annotationId: string) => void;
-  onRemoveFile?: (fileId: string, targetType: string) => void;
+  onRemoveFile?: (fileId: string, targetType: string) => void; // This might need to handle multiple file IDs for folder deletion
+  onRemoveFiles?: (fileIds: string[], targetType: string) => void; // New prop for removing multiple files (e.g., from a folder)
 }
 
 const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
@@ -34,33 +44,219 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
   onUpload,
   onAddToAnnotation,
   onRemoveAnnotationRange,
-  onRemoveFile
+  onRemoveFile, // Keep for single file deletion logic if still used directly
+  onRemoveFiles // Use this for folder deletion cleanup
 }) => {
   const [selectedRange, setSelectedRange] = useState<DocumentRange | null>(null);
   const [selectionRectangle, setSelectionPosition] = useState<DOMRect | null>(null);
+  const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
+  const [renderedDocument, setRenderedDocument] = useState<RenderedDocument | null>(null);
+  const [isLoadingContent, setIsLoadingContent] = useState<boolean>(false);
 
-  const contentRef = useRef<HTMLDivElement | null>(null);
+  const editorContentRef = useRef<HTMLDivElement | null>(null);
   const cachedSelectedRange = useRef<Range | null>(null);
 
+  // Helper function to find an item in the tree (assuming it's defined as per summary)
+  const findItemById = useCallback((items: AnnotationDocumentItem[], id: string): AnnotationDocumentItem | null => {
+    for (const item of items) {
+      if (item.id === id) return item;
+      if (item.children) {
+        const found = findItemById(item.children, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  }, []);
+
+  // Helper function to update an item in the tree (assuming it's defined as per summary)
+  const updateItemInTree = useCallback((currentFiles: AnnotationDocumentItem[], id: string, updates: Partial<AnnotationDocumentItem>): AnnotationDocumentItem[] => {
+    return currentFiles.map(item => {
+      if (item.id === id) {
+        return { ...item, ...updates };
+      }
+      if (item.children) {
+        return { ...item, children: updateItemInTree(item.children, id, updates) };
+      }
+      return item;
+    });
+  }, []);
+
+  // Helper function to remove an item from the tree (assuming it's defined as per summary)
+  const removeItemFromTree = useCallback((currentFiles: AnnotationDocumentItem[], idToRemove: string): AnnotationDocumentItem[] => {
+    return currentFiles.filter(item => {
+      if (item.id === idToRemove) {
+        return false;
+      }
+      if (item.children) {
+        item.children = removeItemFromTree(item.children, idToRemove);
+      }
+      return true;
+    });
+  }, []);
+
+  // Helper to find the first file in the tree (assuming it's defined as per summary)
+  const findFirstFile = useCallback((items: AnnotationDocumentItem[]): AnnotationDocumentItem | null => {
+    for (const item of items) {
+      if (item.type === 'file') return item;
+      if (item.type === 'folder' && item.children) {
+        const firstFileInChildren = findFirstFile(item.children);
+        if (firstFileInChildren) return firstFileInChildren;
+      }
+    }
+    return null;
+  }, []);
+
+  // Helper to get all file IDs from the entire tree
+  const getAllFileIdsInTree = (items: AnnotationDocumentItem[]): string[] => {
+    let ids: string[] = [];
+    for (const item of items) {
+      if (item.type === 'file') {
+        ids.push(item.id);
+      }
+      if (item.children) {
+        ids = ids.concat(getAllFileIdsInTree(item.children));
+      }
+    }
+    return ids;
+  };
+
+
+  // Effect to select the first file when files are loaded or changed
+  useEffect(() => {
+    if (files.length > 0 && !selectedFileId) {
+      const firstFile = findFirstFile(files);
+      if (firstFile) {
+        setSelectedFileId(firstFile.id);
+      }
+    } else if (selectedFileId && !findItemById(files, selectedFileId)) {
+      // If selected file is removed, select the first available file
+      const firstFile = findFirstFile(files);
+      setSelectedFileId(firstFile ? firstFile.id : null);
+    } else if (files.length === 0) {
+      setSelectedFileId(null);
+      setRenderedDocument(null);
+    }
+  }, [files, selectedFileId, findItemById, findFirstFile]);
+
+
+  // Effect to handle newly selected file from App.tsx (for handleRevealRange)
+  useEffect(() => {
+    const newlySelectedItem = files.flatMap(f => f.isNewlySelectedInPanel ? [f] : (f.children ? f.children.filter(cf => cf.isNewlySelectedInPanel) : [])).find(i => i); // Simplified search
+
+    if (newlySelectedItem) {
+      const itemInTree = findItemById(files, newlySelectedItem.id); // Ensure we use the item from the current tree state
+      if (itemInTree) {
+        setSelectedFileId(itemInTree.id);
+        // If it's a file and content is not loaded, loadContentForFile will be triggered by another useEffect
+        // If it's a folder, we might want to expand its parents (not implemented here yet)
+
+        // Remove the flag using functional update to onSetFiles
+        // onSetFiles(currentFiles => updateItemInTree(currentFiles, itemInTree.id, { isNewlySelectedInPanel: false }));
+        files.splice(0, files.length, ...updateItemInTree(files, itemInTree.id, { isNewlySelectedInPanel: false }));
+      }
+    }
+  }, [files, findItemById, updateItemInTree]);
+
+  const loadContentForFile = useCallback(async (fileId: string, filePath: string) => {
+    // No longer directly sets isLoadingContent or renderedDocument here.
+    // This will be handled by the useEffect hook observing selectedFileId and files changes.
+    try {
+      const contentBuffer = await window.localFunctionality.retrieveLocalResource(filePath);
+      if (contentBuffer) {
+        const encoding = jschardet.detect(Buffer.from(contentBuffer)).encoding ?? 'GB18030';  // 难以检测，所以默认为 GB18030，见 https://github.com/aadsm/jschardet/issues/49
+        const content = new TextDecoder(encoding).decode(contentBuffer);
+        onSetFiles(prevFiles => updateItemInTree(prevFiles, fileId, { content }));
+        // The useEffect for selectedFileId will pick up this change in 'files'
+        // and then create the RenderedDocument.
+      } else {
+        throw new Error('File content is empty or could not be retrieved.');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`Error loading content for ${filePath}:`, errorMessage);
+      message.error(`加载文件内容失败: ${errorMessage}`);
+      // Store error in the file item itself for potential display
+      onSetFiles(prevFiles => updateItemInTree(prevFiles, fileId, { content: `Error loading content: ${errorMessage}` }));
+      // The useEffect for selectedFileId will see this error content and can decide how to display it.
+    }
+  }, [onSetFiles, updateItemInTree]);
+
+  // Effect to manage loading and preparing RenderedDocument based on selectedFileId and files content
+  useEffect(() => {
+    if (!selectedFileId) {
+      setRenderedDocument(null);
+      setIsLoadingContent(false);
+      return;
+    }
+
+    const item = findItemById(files, selectedFileId);
+
+    if (!item || item.type === 'folder') {
+      setRenderedDocument(null);
+      setIsLoadingContent(false);
+      return;
+    }
+
+    // At this point, item is a file
+    // Always clear old document and set loading when selection changes or content might be loading
+    setRenderedDocument(null);
+    setIsLoadingContent(true);
+
+    if (item.content !== undefined && !item.content.startsWith('Error loading content:')) {
+      // Content is already loaded and not an error message
+      const doc = new RenderedDocument(item.content, targetType === 'code' ? 'code' : 'markdown', item.localPath);
+      item.renderedDocument = doc;
+
+      setRenderedDocument(doc);
+      setIsLoadingContent(false);
+
+      // doc.resolveLocalResources().then(() => {
+      //   if (selectedFileId === item.id) { // Check if selection is still current
+      //     setRenderedDocument(doc);
+      //     setIsLoadingContent(false);
+      //   }
+      // }).catch(err => {
+      //   console.error("Error resolving resources for pre-loaded content:", err);
+      //   if (selectedFileId === item.id) {
+      //     message.error('资源解析失败');
+      //     // Optionally, store this error state in a way the rendering useEffect can display it
+      //     // For now, renderedDocument remains null, and isLoadingContent will be set to false.
+      //     setIsLoadingContent(false);
+      //   }
+      // });
+    } else if (item.content && item.content.startsWith('Error loading content:')) {
+      // Content is an error message from a previous load attempt
+      // renderedDocument remains null, display the error via main rendering useEffect
+      setIsLoadingContent(false);
+    } else if (item.localPath) {
+      // Content needs to be fetched. loadContentForFile will update 'files',
+      // which will cause this useEffect to re-run. isLoadingContent is already true.
+      loadContentForFile(selectedFileId, item.localPath);
+    } else {
+      // File item, but no content and no path to load it
+      message.error('文件内容无法加载 (无内容信息且无本地路径)');
+      setIsLoadingContent(false);
+      // renderedDocument is already null
+    }
+
+  }, [selectedFileId, files, targetType, loadContentForFile, findItemById]);
+
   const handleFileImport = async (file: UploadFile) => {
+    // ... (existing handleFileImport logic, ensure it sets type: 'file')
+    // Modified to fit the tree structure, adding as a top-level item
     try {
       if (!(file instanceof File)) {
         message.error('无效的文件');
         return false;
       }
-
-      // 检查文件大小（例如：限制为10MB）
       if (file.size > 10 * 1024 * 1024) {
         message.error('文件太大，请选择小于10MB的文件');
         return false;
       }
-
-      // 读取文件内容
       const contentBytes = await new Promise<ArrayBuffer>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => resolve(e.target?.result as ArrayBuffer);
         reader.onerror = () => reject(new Error('文件读取失败'));
-
         reader.readAsArrayBuffer(file);
       });
 
@@ -68,73 +264,239 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
       const contentBytesBuffer = Buffer.from(contentBytes);
 
       if (['.doc', '.docx'].some(suffix => file.name.endsWith(suffix))) {
-        if (window.localFunctionality) {    // this is only present in electron build
+        if (window.localFunctionality) {
           content = await window.localFunctionality.wordDocumentResolve(new Uint8Array(contentBytesBuffer).buffer);
-
-          if (content === undefined) {
-            throw new Error('Failed to upload file to the server');
-          }
+          if (content === undefined) throw new Error('Failed to resolve Word document');
         } else {
-          // console.log(`The build is not electron. Reading response from port 5050.`);
-          const response = await fetch('http://localhost:5050/word-resolve', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/octet-stream'
-            },
-            body: contentBytes,
-          });
-
-          if (!response.ok) {
-            throw new Error('Failed to upload file to the server');
-          }
-
+          const response = await fetch('http://localhost:5050/word-resolve', { /* ... */ });
+          if (!response.ok) throw new Error('Failed to upload file to the server');
           content = await response.text();
         }
       } else {
-        const encoding = jschardet.detect(contentBytesBuffer).encoding ?? 'GB18030';  // 难以检测，所以默认为 GB18030，见 https://github.com/aadsm/jschardet/issues/49
+        const encoding = jschardet.detect(contentBytesBuffer).encoding ?? 'GB18030';
         content = new TextDecoder(encoding).decode(contentBytesBuffer);
       }
 
-      // 上传到服务器
-      const result = await api.uploadCode(file);
-
+      const result = await api.uploadCode(file); // This might need adjustment if it assumes flat structure
       content = regularizeFileContent(content);
 
-      // 更新本地状态
-      const newFile: AnnotationDocumentItem = {
-        id: file.url ?? `url-unknown-file-${result.id}`,
+      const newFileItem: AnnotationDocumentItem = {
+        id: file.url ?? result.id ?? `file-${Date.now()}-${Math.random()}`, // Ensure unique ID
         name: file.name,
         content: content,
-        isExpanded: true,
+        type: 'file', // Explicitly set type
+        localPath: (file as any).path, // For Electron
       };
 
-      // Electron imported path
-      const localPath: string = (file as any).path;
-      if (localPath) {
-        newFile.localPath = localPath;
+      onSetFiles(currentFiles => [...currentFiles, newFileItem]);
+      onUpload?.(result); // This might also need context if it updates a global list
+      message.success(`成功导入文件：${file.name}`);
+      if (!selectedFileId) {
+        setSelectedFileId(newFileItem.id);
       }
-
-      onSetFiles([...files, newFile]);
-      onUpload?.(result);
-      message.success(`成功导入${targetTypeName}：${file.name}`);
     } catch (error) {
-      console.error('Failed to upload code:', error);
-      message.error(`${targetTypeName}导入失败`);
+      console.error('Failed to import file:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      message.error(`文件导入失败: ${errorMessage}`);
     }
-    return false;
+    return false; // Prevent default upload behavior
   };
 
-  const toggleExpansion = (id: string) => {
-    onSetFiles(
-      files.map(file =>
-        file.id === id ? { ...file, isExpanded: !file.isExpanded } : file
-      )
-    );
+  const handleFolderImport = async () => {
+    const localFunc = window.localFunctionality;
+    if (!localFunc || !localFunc.electronShowOpenDialog || !localFunc.scanDirectory || !localFunc.retrieveLocalResource) {
+      message.error('此功能所需的文件系统访问接口不完整，请检查 Electron Preload 脚本。');
+      return;
+    }
+
+    try {
+      const dialogResult = await localFunc.electronShowOpenDialog({ properties: ['openDirectory'], title: '选择文件夹' });
+      if (dialogResult.canceled || dialogResult.filePaths.length === 0) {
+        return;
+      }
+      const folderPath = dialogResult.filePaths[0];
+      const scanResult = await localFunc.scanDirectory(folderPath, targetType === 'doc' ? ['.md', '.markdown'] : undefined);
+
+      if (scanResult.error) {
+        message.error(`扫描文件夹失败: ${scanResult.error}`);
+        return;
+      }
+
+      if (scanResult.fileTree && scanResult.fileTree.length > 0) {
+        message.info('正在加载文件夹内容...', 0); // Display loading message, 0 means it won't auto-close
+
+        // Async function to map raw tree and load file contents
+        const mapRawTreeAndLoadContents = async (rawItems: any[]): Promise<AnnotationDocumentItem[]> => {
+          return Promise.all(rawItems.map(async (rawItem): Promise<AnnotationDocumentItem> => {
+            let fileContent: string | undefined = undefined;
+            let childrenItems: AnnotationDocumentItem[] | undefined = undefined;
+
+            if (rawItem.type === 'file' && rawItem.path) {
+              try {
+                const contentBuffer = await localFunc.retrieveLocalResource(rawItem.path);
+                if (contentBuffer) {
+                  // Use Buffer for jschardet, similar to handleFileImport and loadContentForFile
+                  const buffer = Buffer.from(contentBuffer);
+                  const encoding = jschardet.detect(buffer).encoding ?? 'GB18030';
+                  fileContent = new TextDecoder(encoding).decode(contentBuffer);
+                  fileContent = regularizeFileContent(fileContent);
+                } else {
+                  fileContent = 'Error loading content: File content is empty or could not be retrieved.';
+                }
+              } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                fileContent = `Error loading content: ${errorMessage}`;
+                console.error(`Error pre-loading content for ${rawItem.path}:`, errorMessage);
+              }
+            }
+
+            if (rawItem.type === 'folder' && rawItem.children && rawItem.children.length > 0) {
+              childrenItems = await mapRawTreeAndLoadContents(rawItem.children);
+            } else if (rawItem.type === 'folder') {
+              childrenItems = []; // Ensure empty folders have an empty children array
+            }
+
+            return {
+              id: rawItem.id || `${rawItem.type}-${rawItem.name}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, // More robust ID
+              name: rawItem.name,
+              type: rawItem.type,
+              localPath: rawItem.path,
+              content: fileContent, // Content is now pre-loaded for files
+              children: childrenItems,
+              isExpanded: false, // Default to collapsed
+            };
+          }));
+        };
+
+        try {
+          const newFileTree = await mapRawTreeAndLoadContents(scanResult.fileTree);
+          message.destroy(); // Clear loading message
+          onSetFiles(newFileTree);
+          message.success('文件夹导入并加载完成！');
+          const firstFile = findFirstFile(newFileTree);
+          if (firstFile) {
+            setSelectedFileId(firstFile.id);
+          } else {
+            setSelectedFileId(null);
+          }
+        } catch (processingError) {
+          message.destroy(); // Clear loading message
+          console.error('Error processing folder tree and loading files:', processingError);
+          const errMessage = processingError instanceof Error ? processingError.message : String(processingError);
+          message.error(`处理文件夹内容时出错: ${errMessage}`);
+        }
+
+      } else {
+        message.info('选择的文件夹中没有找到 Markdown 文件或文件夹为空。');
+        onSetFiles([]);
+        setSelectedFileId(null);
+      }
+    } catch (error) {
+      console.error('Folder import process error:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      message.error(`导入文件夹时出错: ${errorMessage}`);
+    }
+  };
+
+  const handleClearAll = () => {
+    if (files.length === 0) {
+      message.info('文件列表已为空。');
+      return;
+    }
+
+    Modal.confirm({
+      title: '确认清空',
+      content: '确定要移除所有文件和文件夹吗？相关的标注也将被移除。此操作不可撤销。',
+      okText: '全部清除',
+      cancelText: '取消',
+      okType: 'danger',
+      onOk: () => {
+        const allFileIds = getAllFileIdsInTree(files);
+
+        if (onRemoveFiles && allFileIds.length > 0) {
+          onRemoveFiles(allFileIds, targetType);
+        }
+
+        onSetFiles([]); // This will trigger useEffect to update selectedFileId and renderedDocument
+        message.success('所有文件和文件夹已清除。');
+      },
+    });
+  };
+
+  const handleItemSelectInTree = (item: AnnotationDocumentItem) => {
+    if (item.type === 'folder') {
+      // Toggle expansion
+      onSetFiles(currentFiles => updateItemInTree(currentFiles, item.id, { isExpanded: !item.isExpanded }));
+      // Optionally, select the folder itself or do nothing for selection
+      // setSelectedFileId(item.id); // If you want to "select" folders to show info or clear editor
+    } else {
+      // Select file
+      setSelectedFileId(item.id);
+      // Content loading is handled by useEffect watching selectedFileId
+    }
+  };
+
+  const getAllFileIdsFromSubtree = (itemId: string): string[] => {
+    const ids: string[] = [];
+    const item = findItemById(files, itemId);
+
+    function collect(currentItem: AnnotationDocumentItem) {
+      if (currentItem.type === 'file') {
+        ids.push(currentItem.id);
+      }
+      if (currentItem.children) {
+        currentItem.children.forEach(collect);
+      }
+    }
+
+    if (item) {
+      collect(item);
+    }
+    return ids;
+  };
+
+  const handleDeleteFileFromTree = (itemIdToDelete: string) => {
+    const itemToDelete = findItemById(files, itemIdToDelete);
+    if (!itemToDelete) return;
+
+    const confirmMsg = itemToDelete.type === 'folder'
+      ? '确定要删除该文件夹及其所有内容吗？相关的标注也将被移除。'
+      : '确定要删除该文件吗？相关的标注也将被移除。';
+
+    Modal.confirm({
+      title: '确认删除',
+      content: confirmMsg,
+      okText: '确认',
+      cancelText: '取消',
+      onOk: () => {
+        const idsToRemove = getAllFileIdsFromSubtree(itemIdToDelete);
+
+        if (onRemoveFiles && idsToRemove.length > 0) {
+          onRemoveFiles(idsToRemove, targetType);
+        } else if (onRemoveFile && idsToRemove.length === 1 && itemToDelete.type === 'file') { // Fallback for single file if onRemoveFiles not provided
+          onRemoveFile(idsToRemove[0], targetType);
+        }
+
+        onSetFiles(currentFiles => removeItemFromTree(currentFiles, itemIdToDelete));
+
+        if (selectedFileId === itemIdToDelete || (itemToDelete.type === 'folder' && selectedFileId && idsToRemove.includes(selectedFileId))) {
+          const firstFile = findFirstFile(files.filter(f => f.id !== itemIdToDelete)); // Check remaining files
+          setSelectedFileId(firstFile ? firstFile.id : null);
+        }
+        message.success(`${itemToDelete.type === 'folder' ? '文件夹' : '文件'} "${itemToDelete.name}" 已删除`);
+      },
+    });
+  };
+
+  // Event handlers that were previously reported as missing
+  const handleMouseDownOnEditor = () => {
+    setSelectedRange(null);
+    setSelectionPosition(null);
   };
 
   const handleCodeSelection = async () => {
     const selection = window.getSelection();
-    if (!selection || selection.isCollapsed) {
+    if (!selection || selection.isCollapsed || !selectedFileId || !renderedDocument) {
       setSelectedRange(null);
       setSelectionPosition(null);
       return;
@@ -142,61 +504,43 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
 
     try {
       const range = selection.getRangeAt(0);
-
-      // 找到当前选中的文件
-      const codeElement = range.startContainer.parentElement;
-      const codeFileElement = codeElement?.closest('.document-block');
-      const fileId = codeElement?.closest('.document-item')?.getAttribute('data-file-id');
-
-      if (!fileId) {
-        console.error('Cannot find code file id');
+      if (!editorContentRef.current || !editorContentRef.current.contains(range.startContainer)) {
         return;
       }
 
-      if (contentRef.current) {
-        // 获取选区的位置
-        const rect = range.getBoundingClientRect();
+      const targetFile = findItemById(files, selectedFileId); // Get current file data
+      if (!targetFile || targetFile.type !== 'file' || !targetFile.content) {
+        console.error('Cannot find target file or its content for selection');
+        return;
+      }
 
-        // 设置悬浮位置
-        setSelectionPosition(rect);
+      const rect = range.getBoundingClientRect();
+      setSelectionPosition(rect);
 
-        const targetFile = files.find(f => f.id === fileId);
-        if (!targetFile) {
-          return;
+      const editorDiv = editorContentRef.current.querySelector(targetType === 'code' ? 'pre.document-block' : 'div.document-block');
+      if (editorDiv && editorDiv instanceof HTMLElement) {
+        const [start, end] = renderedDocument.getSourceDocumentRange(editorDiv, range);
+        if (end - start > 0) {
+          cachedSelectedRange.current = range;
+          setSelectedRange({
+            start: start,
+            end: end,
+            content: targetFile.content.slice(start, end), // Use content from state
+            documentId: selectedFileId
+          });
+        } else {
+          setSelectedRange(null);
+          setSelectionPosition(null);
         }
-        if (!(targetFile.renderedDocument)) {
-          return;
-        }
-
-        const f = targetFile.content;
-        const r = targetFile.renderedDocument;
-
-        const selectedPre = codeFileElement;
-        if (selectedPre && selectedPre instanceof HTMLElement) {
-          const [start, end] = r.getSourceDocumentRange(selectedPre, range);
-          if (end - start > 0) {
-            cachedSelectedRange.current = range;
-
-            setSelectedRange({
-              start: start,
-              end: end,
-              content: f.slice(start, end),
-              documentId: fileId
-            });
-          }
-        }
+      } else {
+        setSelectedRange(null);
+        setSelectionPosition(null);
       }
     } catch (error) {
       console.error('Selection error:', error);
       setSelectedRange(null);
       setSelectionPosition(null);
     }
-  };
-
-  const handleMouseDown = () => {
-    // 在开始新的选择时，清除之前的选择状态
-    setSelectedRange(null);
-    setSelectionPosition(null);
   };
 
   const handleAddToAnnotation = (annotationId?: string, createNew = false) => {
@@ -211,6 +555,7 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
       documentId: selectedRange.documentId
     }, targetType, annotationId, createNew);
     setSelectedRange(null);
+    setSelectionPosition(null); // Clear selection rectangle
     window.getSelection()?.removeAllRanges();
   };
 
@@ -219,125 +564,133 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
       message.warning(`请先选择要标注的${targetTypeName}`);
       return;
     }
-    try {
-      // const newAnnotationId = await onCreateAnnotation?.();
-      // if (!newAnnotationId) {
-      //   message.error('创建标注失败');
-      //   return;
-      // }
-      handleAddToAnnotation(undefined, true);
-    } catch (error) {
-      console.error('Failed to create annotation:', error);
-      message.error('创建标注失败');
-    }
+    handleAddToAnnotation(undefined, true);
   };
 
-  const handleDeleteFile = (fileId: string) => {
-    // 使用 antd 的 Modal.confirm
-
-    Modal.confirm({
-      title: '确认删除',
-      content: '确定要删除该文件吗？',
-      okText: '确认',
-      cancelText: '取消',
-      onOk: () => {
-        onRemoveFile?.(fileId, targetType);
-      },
-    });
-  };
-
-  // 渲染内容，包括高亮
+  // Main rendering useEffect for editor content
   useEffect(() => {
-    if (!(contentRef.current)) {
+    if (!editorContentRef.current) return;
+    const editorDiv = editorContentRef.current;
+
+    const currentFileItem = selectedFileId ? findItemById(files, selectedFileId) : null;
+
+    if (!selectedFileId || !currentFileItem) {
+      editorDiv.innerHTML = `<div style="padding: 20px; text-align: center; color: #aaa;">${files.length > 0 ? '请选择一个文件查看内容。' : '请导入文件或文件夹。'}</div>`;
       return;
     }
 
-    const targetRangesType = targetType === 'code' ? 'codeRanges' : 'docRanges';
-
-    for (const codeItem of contentRef.current.querySelectorAll('.document-item')) {
-      const documentId = codeItem.getAttribute('data-file-id');
-      const documentBlock = codeItem.querySelector('.document-block');
-      if (documentId === null || documentBlock === null || !(documentBlock instanceof HTMLElement)) {
-        continue;
-      }
-
-      const targetFile = files.find(f => f.id === documentId);
-      if (!targetFile) {
-        return;
-      }
-
-      (async () => {
-        if (!(targetFile.renderedDocument)) {
-          targetFile.renderedDocument = new RenderedDocument(targetFile.content, targetType === 'code' ? 'code' : 'markdown', targetFile.localPath);  // FIXME Same logic as above
-          targetFile.content = await targetFile.renderedDocument.resolveLocalResources();
-        }
-
-        const r = targetFile.renderedDocument;
-        documentBlock.innerHTML = await r.render();
-
-        // calculate ranges
-        const coloredRanges: ColorSetUp[] = annotations
-          .map(a => {
-            const rangesInDocument = a[targetRangesType].filter(r => r.documentId === documentId)
-            if (rangesInDocument.length === 0) {
-              return undefined;
-            }
-            return {
-              id: a.id,
-              originalAnnotation: a,
-              color: a.color ?? '#000000',
-              lighterColor: a.lighterColor ?? 'rgba(103, 103, 103, 0.1)',
-              ranges: a[targetRangesType]
-                .filter(r => r.documentId === documentId),
-              handleClick: (e: MouseEvent, range: DocumentRange) => {
-                const selection = window.getSelection();
-                const emptySelection = !selection || selection.isCollapsed || selection.toString().trim() === '';
-                if (!emptySelection) {
-                  return;
-                }
-
-                onRemoveAnnotationRange?.(range, targetType, a.id);
-                e.stopPropagation();  // one update only allow one delete
-              }
-            }
-          })
-          .flatMap(a =>       // each click event should cancel one colored range only, so flat them
-            a === undefined
-              ? []
-              : a.ranges.map(r => ({
-                ...a,
-                ranges: [r]
-              }))
-          )
-          .filter(x => x !== undefined);
-
-        r.colorAll(documentBlock, coloredRanges);
-
-        if (cachedSelectedRange.current) {
-          const sel = window.getSelection();
-          if (sel) {
-            sel.removeAllRanges();
-            sel.addRange(cachedSelectedRange.current);
-          }
-
-          cachedSelectedRange.current = null;
-        }
-      })().then(() => {
-        if (targetFile.afterRender) {
-          targetFile.afterRender();
-          targetFile.afterRender = undefined;
-        }
-      })
+    if (currentFileItem.type === 'folder') {
+      editorDiv.innerHTML = `<div style="padding: 20px; text-align: center; color: #aaa;">这是一个文件夹。请选择一个文件查看内容。</div>`;
+      return;
     }
-  }, [files, annotations]);
+
+    if (isLoadingContent) {
+      editorDiv.innerHTML = '<div style="padding: 20px; text-align: center; color: #aaa;">正在加载内容...</div>';
+      return;
+    }
+
+    if (currentFileItem.content && typeof currentFileItem.content === 'string' && currentFileItem.content.startsWith('Error loading content:')) {
+      editorDiv.innerHTML = `<div style="padding: 20px; text-align: center; color: #dd0000;">${currentFileItem.content}</div>`;
+      return;
+    }
+
+    if (!currentFileItem.renderedDocument) {
+      editorDiv.innerHTML = '<div style="padding: 20px; text-align: center; color: #aaa;">内容加载失败或不可用。</div>';
+      return;
+    }
+
+    editorDiv.innerHTML = '';
+
+    const contentHostElement = document.createElement(targetType === 'code' ? 'pre' : 'div');
+    contentHostElement.className = 'document-block' + (targetType === 'code' ? '' : ' doc-block');
+    editorDiv.appendChild(contentHostElement);
+
+    (async () => {
+      if (selectedFileId === currentFileItem.id && currentFileItem.renderedDocument) {
+        try {
+          setIsLoadingContent(true);
+
+          contentHostElement.innerHTML = await currentFileItem.renderedDocument.renderWithLocalResource();
+          // Prism.highlightAllUnder(contentHostElement);
+
+          // requestAnimationFrame(() => {
+
+          if (!editorContentRef.current || !editorDiv.contains(contentHostElement) || !selectedFileId || selectedFileId !== currentFileItem.id) return;
+
+          const stillSelectedFile = findItemById(files, selectedFileId);
+          if (stillSelectedFile && stillSelectedFile.id === currentFileItem.id && currentFileItem.renderedDocument) {
+            const currentTargetRangesType = targetType === 'code' ? 'codeRanges' : 'docRanges';
+
+            const currentColoredRanges: ColorSetUp[] = annotations.flatMap(annotation => {
+              const annotationColor = annotation.color || '#CCCCCC'; // Default color if annotation.color is undefined
+              const rangesFromAnnotation = annotation[currentTargetRangesType] || [];
+
+              // Filter for valid ranges in the current document that have a string ID
+              const validRangesInDocument = rangesFromAnnotation
+                .filter((range): range is DocumentRange & { id: string } => // Type guard to ensure range.id is string
+                  range.documentId === selectedFileId
+                );
+
+              if (validRangesInDocument.length === 0) {
+                return []; // Return an empty array to be flattened by flatMap
+              }
+
+              // For each valid DocumentRange, create a ColorSetUp entry
+              return validRangesInDocument.map(docRange => {
+                // docRange is a full DocumentRange object with a guaranteed string id.
+                return {
+                  color: annotationColor,
+                  lighterColor: computeLighterColor(annotationColor),
+                  id: annotation.id, // This is the Annotation ID
+                  ranges: [docRange], // The specific range segment
+                  handleClick: (e, docRange) => {
+                    // clickedRangeId is docRange.id.
+                    // The 'docRange' object (full DocumentRange) is captured in this closure.
+                    onRemoveAnnotationRange?.(docRange, targetType, annotation.id);
+                  }
+                };
+              });
+            });
+
+            currentFileItem.renderedDocument.colorAll(contentHostElement, currentColoredRanges);
+            cachedSelectedRange.current = null;
+          }
+        } catch (error) {
+          console.error('Rendering error:', error);
+          editorDiv.innerHTML = '<div style="color: #dd0000; padding: 20px;">内容渲染失败</div>';
+        } finally {
+          setIsLoadingContent(false);
+        }
+      }
+    })();
+  }, [selectedFileId, targetType, annotations]);
+
+  useEffect(() => {
+    if (isLoadingContent) {
+      return;
+    }
+
+    const currentFileItem = selectedFileId ? findItemById(files, selectedFileId) : null;
+
+    if (currentFileItem && currentFileItem.afterRender) {
+      currentFileItem.afterRender();
+      currentFileItem.afterRender = undefined;
+    }
+  }, [files, isLoadingContent]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (contentRef.current && !contentRef.current.contains(event.target as Node)) {
+      const panelCard = (editorContentRef.current?.closest('.panel'));
+      if (panelCard && !panelCard.contains(event.target as Node)) {
+        if (editorContentRef.current && editorContentRef.current.contains(event.target as Node)) {
+          // Click is inside editor view but might be on scrollbars etc.
+          // This case is tricky, rely on onMouseDownOnEditor for clearing selection within editor.
+          return;
+        }
+        // Click is truly outside the panel that contains the editor.
         setSelectedRange(null);
         setSelectionPosition(null);
-        // 清除文本选择
-        window.getSelection()?.removeAllRanges();
+        // window.getSelection()?.removeAllRanges(); // Be careful with this, might interfere with other inputs
       }
     };
 
@@ -348,118 +701,114 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
   }, []);
 
   useEffect(() => {
-    // 高亮内容
-    if (contentRef.current) {
-      Prism.highlightAllUnder(contentRef.current);
-    }
-  }, [files, annotations]); // 当标注改变时也需要重新高亮
+    if (!editorContentRef.current) return;
+    const editorDiv = editorContentRef.current;
+    editorDiv.scrollTop = 0;
+  }, [selectedFileId])
+
+  const renderFileTree = (items: AnnotationDocumentItem[], level: number): React.ReactNode => {
+    return (
+      <ul style={{ listStyleType: 'none', paddingLeft: level > 0 ? '20px' : '0px', margin: 0 }}>
+        {items.map(item => (
+          <li
+            key={item.id}
+            title={item.name}
+            className={classNames('file-tree-item', { 'selected-file': selectedFileId === item.id })}
+            style={{
+              padding: '3px 0',
+            }}
+          >
+            <div
+              onClick={() => handleItemSelectInTree(item)}
+              style={{
+                cursor: 'pointer',
+                padding: '5px 8px',
+                borderRadius: '3px',
+                backgroundColor: selectedFileId === item.id ? '#e6f7ff' : 'transparent',
+                borderLeft: selectedFileId === item.id ? '3px solid #1890ff' : 'none',
+                display: 'flex',
+                alignItems: 'center',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {item.type === 'folder' ? (
+                item.isExpanded ? <FolderOpenOutlined style={{ marginRight: '8px' }} /> : <FolderOutlined style={{ marginRight: '8px' }} />
+              ) : (
+                <FileTextOutlined style={{ marginRight: '8px' }} />
+              )}
+              <span style={{ flexGrow: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {item.name}
+              </span>
+              <Button
+                icon={<DeleteFilled />}
+                type="text"
+                size="small"
+                danger
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteFileFromTree(item.id);
+                }}
+                style={{ marginLeft: '8px', flexShrink: 0 }}
+              />
+            </div>
+            {item.type === 'folder' && item.isExpanded && item.children && item.children.length > 0 &&
+              renderFileTree(item.children, level + 1)
+            }
+          </li>
+        ))}
+      </ul>
+    );
+  };
 
   return (
     <Card
       title={targetTypeName}
       extra={
-        <Upload
-          beforeUpload={handleFileImport}
-          showUploadList={false}
-        >
-          <Button icon={<DownloadOutlined />}>导入</Button>
-        </Upload>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <Upload
+            beforeUpload={handleFileImport}
+            showUploadList={false}
+            multiple={true} // Allow selecting multiple files for single import
+          >
+            <Button icon={<FileOutlined />}></Button>
+          </Upload>
+          {window.localFunctionality && (
+            <Button onClick={handleFolderImport} icon={<FolderOpenOutlined />}>
+            </Button>
+          )}
+          <Button onClick={handleClearAll} icon={<ClearOutlined />} danger>
+          </Button>
+        </div>
       }
       className={classNames('panel', `panel-${targetType}`)}
+      bodyStyle={{ display: 'flex', flexDirection: 'column', padding: 0, height: 'calc(100% - 57px)' }}
     >
-      <div className="explorer-view"></div>
-      <div className="editor-view"></div>
-      <div className="panel-content" ref={contentRef}>
-        {files.map(file => (
-          <AnnotationDocumentBlock
-            key={file.id}
-            file={file}
-            targetType={targetType}
-            toggleExpansion={toggleExpansion}
-            onDeleteFile={handleDeleteFile}
-            onContentMouseDown={handleMouseDown}
-            onContentMouseUp={handleCodeSelection}
-          />
-        ))}
-        {selectedRange && selectionRectangle &&
-          <FloatingToolbar
-            rect={selectionRectangle}
-            searchAnnotations={searchAnnotations}
-            onAddToAnnotation={handleAddToAnnotation}
-            onCreateAndApplyAnnotation={handleCreateAndApplyAnnotation}
-          ></FloatingToolbar>
+      <div className="explorer-view">
+        {files.length > 0
+          ? renderFileTree(files, 0)
+          : <div style={{ textAlign: 'center', color: '#aaa', padding: '20px' }}>无文件或文件夹。请点击上方按钮导入。</div>
         }
       </div>
+      <div
+        className="editor-view"
+        ref={editorContentRef}
+        style={{ flex: 1, overflowY: 'auto' }}
+        onMouseDown={handleMouseDownOnEditor} // Ensured presence
+        onMouseUp={handleCodeSelection}   // Ensured presence
+      >
+        {/* Content rendered by useEffect */}
+      </div>
+      {selectedRange && selectionRectangle &&
+        <FloatingToolbar
+          rect={selectionRectangle}
+          searchAnnotations={searchAnnotations}
+          onAddToAnnotation={handleAddToAnnotation} // Ensured presence
+          onCreateAndApplyAnnotation={handleCreateAndApplyAnnotation} // Ensured presence
+        />
+      }
     </Card>
   );
 };
-
-interface AnnotationDocumentBlockProps {
-  file: AnnotationDocumentItem;
-  targetType: string;
-  toggleExpansion: (fileId: string) => void;
-  onDeleteFile: (fileId: string) => void;
-  onContentMouseDown: MouseEventHandler<HTMLDivElement>;
-  onContentMouseUp: MouseEventHandler<HTMLDivElement>;
-}
-
-const AnnotationDocumentBlock = ({
-  file,
-  targetType,
-  toggleExpansion,
-  onDeleteFile,
-  onContentMouseDown,
-  onContentMouseUp
-}: AnnotationDocumentBlockProps) => {
-  return (
-    <div key={file.id} className="document-item" data-file-id={file.id}>
-      <Button
-        type="text"
-        onClick={() => toggleExpansion(file.id)}
-        onMouseOver={(e) => e.currentTarget.querySelector('.delete-icon')?.classList.add('show')}
-        onMouseLeave={(e) => e.currentTarget.querySelector('.delete-icon')?.classList.remove('show')}
-        block
-        className="document-header"
-        title={file.name}
-      >
-        <div className="document-header-content">
-          {file.isExpanded ? <CaretDownOutlined /> : <CaretRightOutlined />}
-          <div className='file-label'>
-            <div className='file-name'>{file.name}</div>
-            {file.localPath && <div className='file-path' title={file.localPath}>{file.localPath}</div>}
-          </div>
-
-          <DeleteFilled
-            className='delete-icon'
-            onClick={(e) => {
-              onDeleteFile(file.id);
-              e.stopPropagation();
-            }}
-          />
-        </div>
-      </Button>
-      {file.isExpanded && (
-        <div
-          className="document-content"
-          onMouseDown={onContentMouseDown}
-          onMouseUp={onContentMouseUp}
-        >
-          {
-            targetType === 'code'
-              ?
-              (<pre
-                className="document-block document-block"
-              />)
-              :
-              (<div
-                className="document-block doc-block"
-              />)
-          }
-        </div>
-      )}
-    </div>
-  )
-}
 
 interface FloatingToolbarProps {
   rect: DOMRect;

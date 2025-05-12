@@ -449,13 +449,13 @@ const App: React.FC = () => {
     }
 
     const revealRange = () => {
-      const fileBlock = panelBlock
-        .querySelector(`[data-file-id="${file.id}"]`);
-      if (!fileBlock) {
+      const editorBlock = panelBlock
+        .querySelector('.editor-view');
+      if (!editorBlock || !(editorBlock instanceof HTMLElement)) {
         return;
       }
 
-      const contentBlock = fileBlock
+      const contentBlock = editorBlock
         .querySelector('.document-block');
       if (!contentBlock || !(contentBlock instanceof HTMLElement)) {
         return;
@@ -471,9 +471,6 @@ const App: React.FC = () => {
         return;
       }
 
-      // 滚动到文件
-      fileBlock.scrollIntoView({ behavior: 'smooth' });
-
       // 添加光效
       if (range.coloredElements) {
         for (const element of range.coloredElements) {
@@ -481,7 +478,7 @@ const App: React.FC = () => {
           element.style.boxShadow = `0 0 10px ${annotation.color}`;
         }
 
-        setTimeout(() => {
+        const timeout = setTimeout(() => {
           for (const element of range.coloredElements!) {
             element.style.boxShadow = (element as any).originalBoxShadow ?? '';
           }
@@ -490,10 +487,10 @@ const App: React.FC = () => {
 
       // 范围居中
       const rangeRect = htmlRange.getBoundingClientRect();
-      const blockRect = contentBlock.getBoundingClientRect();
-      const scrollTop = contentBlock.scrollTop + rangeRect.top - blockRect.top - (contentBlock.clientHeight - rangeRect.height) / 2;
+      const blockRect = editorBlock.getBoundingClientRect();
+      const scrollTop = editorBlock.scrollTop + rangeRect.top - blockRect.top - (editorBlock.clientHeight - rangeRect.height) / 2;
 
-      contentBlock.scrollTo({
+      editorBlock.scrollTo({
         top: scrollTop,
         behavior: 'smooth'
       });
@@ -502,7 +499,7 @@ const App: React.FC = () => {
     // 显示文件并在渲染后滚动
     const setFiles = rangeType === 'code' ? setCodeFiles : setDocFiles;
     setFiles(files.map(_file =>
-      _file === file ? { ..._file, isExpanded: true, afterRender: revealRange } : _file
+      _file === file ? { ..._file, isNewlySelectedInPanel: true, afterRender: revealRange } : _file // Changed isExpanded to isNewlySelectedInPanel
     ));
 
   }
@@ -589,7 +586,7 @@ const App: React.FC = () => {
       console.error('Failed to save doc and code:', error);
       message.error('自动保存文档和代码失败');
     }
-  }, [docFiles, codeFiles]);
+  }, [docFiles, codeFiles]);    // FIXME update too frequent
 
   useEffect(() => {
     try {
@@ -1002,5 +999,8 @@ export default App;
 function removeRenderedInfo(files: AnnotationDocumentItem[]) {
   for (const f of files) {
     delete f.renderedDocument;
+    delete f.isExpanded; // Also remove isExpanded here if it was persisted
+    delete f.afterRender; // Ensure afterRender is not persisted
+    delete f.isNewlySelectedInPanel; // Ensure isNewlySelectedInPanel is not persisted
   }
 }

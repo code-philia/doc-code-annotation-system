@@ -24,10 +24,14 @@ export interface AnnotationDocumentItem {     // document is not documentation, 
   id: string;
   /** Display name of the annotation content. */
   name: string;
-  /** Content of the document, a documentation or code file. All line breaks should be converted to \n to match `range.toString()` in HTML interface. */
-  content: string;
+  /** Content of the document, a documentation or code file. All line breaks should be converted to \n to match `range.toString()` in HTML interface. Optional for folders. */
+  content?: string;
   /** Optional local path, which is only available in Electron build. */
   localPath?: string;
+  /** Type of the item, 'file' or 'folder' */
+  type: 'file' | 'folder';
+  /** Children items, for folder type */
+  children?: AnnotationDocumentItem[];
   /** Optional attached resources such as images, which is only available in Electron build. */
   resources?: {
     /** Type of a resource, probably MIME type in practical use. */
@@ -39,10 +43,11 @@ export interface AnnotationDocumentItem {     // document is not documentation, 
   }[];
 
   /** If is expanded in UI in runtime. */
-  isExpanded: boolean;
+  isExpanded?: boolean; // Used for UI expansion state in tree for folders
 
   /** Render cache. */
   renderedDocument?: RenderedDocument;
   /** Dynamic cache for range reveal in React render. */
   afterRender?: () => void;
+  isNewlySelectedInPanel?: boolean; // Added for panel interaction
 }

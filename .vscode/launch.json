@@ -43,6 +43,14 @@
             "args": [".", "--remote-debugging-port=9222"],
             "outputCapture": "std",
             "console": "integratedTerminal"
+        },
+        {
+          "type": "node",
+          "request": "launch",
+          "name": "Debug React App Rewired",
+          "cwd": "${workspaceFolder}/frontend",
+          "runtimeExecutable": "npm",
+          "runtimeArgs": ["run", "start"]
         }
     ]
 }
