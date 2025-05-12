@@ -197,6 +197,7 @@ export interface ColorSetUp {
   /** CSS-supported color attribute. */
   lighterColor: string;
   handleClick?: (e: MouseEvent, range: DocumentRange) => any;
+  handleRightClick?: (e: MouseEvent, range: DocumentRange) => any;
 }
 
 export class RenderedDocument {
@@ -454,6 +455,10 @@ export class RenderedDocument {
       }
 
       const addHandler = (element: HTMLElement) => {
+        const handleRightClick = coloredRange.handleRightClick;
+        if (handleRightClick)
+          element.oncontextmenu = (e) => handleRightClick(e, range);
+
         const handleClick = coloredRange.handleClick;
         if (handleClick)
           element.onclick = (e) => handleClick(e, range);
@@ -899,9 +904,9 @@ export function findOffsetFromPosition(container: Node, offset: number, rootElem
 
         const _offset = getCaretCharacterOffsetWithin(container, offset, node);
 
-        if (offset === 0) return i;
+        if (_offset === 0) return i;
 
-        // NOTE <td> parse-start will start from '| xxx' in source document
+        // NOTE e.g., <td> parse-start will start from '| xxx' in source document, and similarly there are other elements that text content starts at different offset
         // NOTE do not use getTextContentBytesLength here because it is the length as string in sourceDocument
         return _offset === null ? null : j - ((node.textContent?.length ?? 0) - _offset);
       }
