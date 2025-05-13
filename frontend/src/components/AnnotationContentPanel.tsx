@@ -1,31 +1,23 @@
-import React, { useState, useRef, useEffect, MouseEventHandler, useCallback } from 'react';
-import { Card, Button, Upload, message, Modal, Input } from 'antd';
-import {
-  DownloadOutlined,
-  FolderOpenOutlined,
-  FolderOutlined,
-  FileTextOutlined,
-  DeleteFilled,
-  ClearOutlined,
-  PlusOutlined,
-  FileOutlined
-} from '@ant-design/icons';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+
+import { ClearOutlined, DeleteFilled, FileOutlined, FileTextOutlined, FolderOpenOutlined, FolderOutlined, PlusOutlined } from '@ant-design/icons';
+import { Button, Card, Input, message, Modal, Upload } from 'antd';
 import type { UploadFile } from 'antd/es/upload/interface';
 import classNames from 'classnames';
-import Prism from 'prismjs';
-import 'prismjs/themes/prism.css';
 import jschardet from 'jschardet';
 
 import * as api from '../services/api';
-import { AnnotationDocumentItem, DocumentRange, Annotation } from '../types';
+import { Annotation, AnnotationDocumentItem, DocumentRange } from '../types';
 import { ColorSetUp, computeLighterColor, regularizeFileContent, RenderedDocument } from './utils';
 
 interface AnnotationContentPanelProps {
   files: AnnotationDocumentItem[];
   annotations: Annotation[];
-  searchAnnotations: (keyword: string) => Annotation[];
   targetType: string;
   targetTypeName: string;
+
+  handleSearchAnnotations: (keyword: string) => Annotation[];
+
   onSetFiles: (filesOrUpdater: AnnotationDocumentItem[] | ((currentFiles: AnnotationDocumentItem[]) => AnnotationDocumentItem[])) => void; // Allow functional updates
   onUpload?: (result: { id: string; name: string }) => void;
   onAddToAnnotation?: (range: DocumentRange, targetType: string, annotationId?: string, createNew?: boolean) => void;
@@ -35,30 +27,17 @@ interface AnnotationContentPanelProps {
   onRemoveFiles?: (fileIds: string[], targetType: string) => void; // New prop for removing multiple files (e.g., from a folder)
 }
 
-const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
-  files,
-  annotations,
-  searchAnnotations,
-  targetType,
-  targetTypeName,
-  onSetFiles,
-  onUpload,
-  onAddToAnnotation,
-  onRevealAnnotationRange,
-  onRemoveAnnotationRange,
-  onRemoveFile, // Keep for single file deletion logic if still used directly
-  onRemoveFiles // Use this for folder deletion cleanup
-}) => {
+const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = (props) => {
   const [selectedRange, setSelectedRange] = useState<DocumentRange | null>(null);
   const [selectionRectangle, setSelectionPosition] = useState<DOMRect | null>(null);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
+
   const [renderedDocument, setRenderedDocument] = useState<RenderedDocument | null>(null);
   const [isLoadingContent, setIsLoadingContent] = useState<boolean>(false);
 
   const editorContentRef = useRef<HTMLDivElement | null>(null);
   const cachedSelectedRange = useRef<Range | null>(null);
 
-  // Helper function to find an item in the tree (assuming it's defined as per summary)
   const findItemById = useCallback((items: AnnotationDocumentItem[], id: string): AnnotationDocumentItem | null => {
     for (const item of items) {
       if (item.id === id) return item;
@@ -70,7 +49,6 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
     return null;
   }, []);
 
-  // Helper function to update an item in the tree (assuming it's defined as per summary)
   const updateItemInTree = useCallback((currentFiles: AnnotationDocumentItem[], id: string, updates: Partial<AnnotationDocumentItem>): AnnotationDocumentItem[] => {
     return currentFiles.map(item => {
       if (item.id === id) {
@@ -83,7 +61,6 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
     });
   }, []);
 
-  // Helper function to remove an item from the tree (assuming it's defined as per summary)
   const removeItemFromTree = useCallback((currentFiles: AnnotationDocumentItem[], idToRemove: string): AnnotationDocumentItem[] => {
     return currentFiles.filter(item => {
       if (item.id === idToRemove) {
@@ -96,7 +73,6 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
     });
   }, []);
 
-  // Helper to find the first file in the tree (assuming it's defined as per summary)
   const findFirstFile = useCallback((items: AnnotationDocumentItem[]): AnnotationDocumentItem | null => {
     for (const item of items) {
       if (item.type === 'file') return item;
@@ -108,7 +84,6 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
     return null;
   }, []);
 
-  // Helper to get all file IDs from the entire tree
   const getAllFileIdsInTree = (items: AnnotationDocumentItem[]): string[] => {
     let ids: string[] = [];
     for (const item of items) {
@@ -121,127 +96,6 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
     }
     return ids;
   };
-
-
-  // Effect to select the first file when files are loaded or changed
-  useEffect(() => {
-    if (files.length > 0 && !selectedFileId) {
-      const firstFile = findFirstFile(files);
-      if (firstFile) {
-        setSelectedFileId(firstFile.id);
-      }
-    } else if (selectedFileId && !findItemById(files, selectedFileId)) {
-      // If selected file is removed, select the first available file
-      const firstFile = findFirstFile(files);
-      setSelectedFileId(firstFile ? firstFile.id : null);
-    } else if (files.length === 0) {
-      setSelectedFileId(null);
-      setRenderedDocument(null);
-    }
-  }, [files, selectedFileId, findItemById, findFirstFile]);
-
-
-  // Effect to handle newly selected file from App.tsx (for handleRevealRange)
-  useEffect(() => {
-    const newlySelectedItem = files.flatMap(f => f.isNewlySelectedInPanel ? [f] : (f.children ? f.children.filter(cf => cf.isNewlySelectedInPanel) : [])).find(i => i); // Simplified search
-
-    if (newlySelectedItem) {
-      const itemInTree = findItemById(files, newlySelectedItem.id); // Ensure we use the item from the current tree state
-      if (itemInTree) {
-        setSelectedFileId(itemInTree.id);
-        // If it's a file and content is not loaded, loadContentForFile will be triggered by another useEffect
-        // If it's a folder, we might want to expand its parents (not implemented here yet)
-
-        // Remove the flag using functional update to onSetFiles
-        // onSetFiles(currentFiles => updateItemInTree(currentFiles, itemInTree.id, { isNewlySelectedInPanel: false }));
-        files.splice(0, files.length, ...updateItemInTree(files, itemInTree.id, { isNewlySelectedInPanel: false }));
-      }
-    }
-  }, [files, findItemById, updateItemInTree]);
-
-  const loadContentForFile = useCallback(async (fileId: string, filePath: string) => {
-    // No longer directly sets isLoadingContent or renderedDocument here.
-    // This will be handled by the useEffect hook observing selectedFileId and files changes.
-    try {
-      const contentBuffer = await window.localFunctionality.retrieveLocalResource(filePath);
-      if (contentBuffer) {
-        const encoding = jschardet.detect(Buffer.from(contentBuffer)).encoding ?? 'GB18030';  // 难以检测，所以默认为 GB18030，见 https://github.com/aadsm/jschardet/issues/49
-        const content = new TextDecoder(encoding).decode(contentBuffer);
-        onSetFiles(prevFiles => updateItemInTree(prevFiles, fileId, { content }));
-        // The useEffect for selectedFileId will pick up this change in 'files'
-        // and then create the RenderedDocument.
-      } else {
-        throw new Error('File content is empty or could not be retrieved.');
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`Error loading content for ${filePath}:`, errorMessage);
-      message.error(`加载文件内容失败: ${errorMessage}`);
-      // Store error in the file item itself for potential display
-      onSetFiles(prevFiles => updateItemInTree(prevFiles, fileId, { content: `Error loading content: ${errorMessage}` }));
-      // The useEffect for selectedFileId will see this error content and can decide how to display it.
-    }
-  }, [onSetFiles, updateItemInTree]);
-
-  // Effect to manage loading and preparing RenderedDocument based on selectedFileId and files content
-  useEffect(() => {
-    if (!selectedFileId) {
-      setRenderedDocument(null);
-      setIsLoadingContent(false);
-      return;
-    }
-
-    const item = findItemById(files, selectedFileId);
-
-    if (!item || item.type === 'folder') {
-      setRenderedDocument(null);
-      setIsLoadingContent(false);
-      return;
-    }
-
-    // At this point, item is a file
-    // Always clear old document and set loading when selection changes or content might be loading
-    setRenderedDocument(null);
-    setIsLoadingContent(true);
-
-    if (item.content !== undefined && !item.content.startsWith('Error loading content:')) {
-      // Content is already loaded and not an error message
-      const doc = new RenderedDocument(item.content, targetType === 'code' ? 'code' : 'markdown', item.localPath);
-      item.renderedDocument = doc;
-
-      setRenderedDocument(doc);
-      setIsLoadingContent(false);
-
-      // doc.resolveLocalResources().then(() => {
-      //   if (selectedFileId === item.id) { // Check if selection is still current
-      //     setRenderedDocument(doc);
-      //     setIsLoadingContent(false);
-      //   }
-      // }).catch(err => {
-      //   console.error("Error resolving resources for pre-loaded content:", err);
-      //   if (selectedFileId === item.id) {
-      //     message.error('资源解析失败');
-      //     // Optionally, store this error state in a way the rendering useEffect can display it
-      //     // For now, renderedDocument remains null, and isLoadingContent will be set to false.
-      //     setIsLoadingContent(false);
-      //   }
-      // });
-    } else if (item.content && item.content.startsWith('Error loading content:')) {
-      // Content is an error message from a previous load attempt
-      // renderedDocument remains null, display the error via main rendering useEffect
-      setIsLoadingContent(false);
-    } else if (item.localPath) {
-      // Content needs to be fetched. loadContentForFile will update 'files',
-      // which will cause this useEffect to re-run. isLoadingContent is already true.
-      loadContentForFile(selectedFileId, item.localPath);
-    } else {
-      // File item, but no content and no path to load it
-      message.error('文件内容无法加载 (无内容信息且无本地路径)');
-      setIsLoadingContent(false);
-      // renderedDocument is already null
-    }
-
-  }, [selectedFileId, files, targetType, loadContentForFile, findItemById]);
 
   const handleFileImport = async (file: UploadFile) => {
     // ... (existing handleFileImport logic, ensure it sets type: 'file')
@@ -290,8 +144,8 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
         localPath: (file as any).path, // For Electron
       };
 
-      onSetFiles(currentFiles => [...currentFiles, newFileItem]);
-      onUpload?.(result); // This might also need context if it updates a global list
+      props.onSetFiles(currentFiles => [...currentFiles, newFileItem]);
+      props.onUpload?.(result); // This might also need context if it updates a global list
       message.success(`成功导入文件：${file.name}`);
       if (!selectedFileId) {
         setSelectedFileId(newFileItem.id);
@@ -317,7 +171,7 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
         return;
       }
       const folderPath = dialogResult.filePaths[0];
-      const scanResult = await localFunc.scanDirectory(folderPath, targetType === 'doc' ? ['.md', '.markdown'] : undefined);
+      const scanResult = await localFunc.scanDirectory(folderPath, props.targetType === 'doc' ? ['.md', '.markdown'] : undefined);
 
       if (scanResult.error) {
         message.error(`扫描文件夹失败: ${scanResult.error}`);
@@ -373,7 +227,7 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
         try {
           const newFileTree = await mapRawTreeAndLoadContents(scanResult.fileTree);
           message.destroy(); // Clear loading message
-          onSetFiles(newFileTree);
+          props.onSetFiles(newFileTree);
           message.success('文件夹导入并加载完成！');
           const firstFile = findFirstFile(newFileTree);
           if (firstFile) {
@@ -390,7 +244,7 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
 
       } else {
         message.info('选择的文件夹中没有找到 Markdown 文件或文件夹为空。');
-        onSetFiles([]);
+        props.onSetFiles([]);
         setSelectedFileId(null);
       }
     } catch (error) {
@@ -401,7 +255,7 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
   };
 
   const handleClearAll = () => {
-    if (files.length === 0) {
+    if (props.files.length === 0) {
       message.info('文件列表已为空。');
       return;
     }
@@ -413,13 +267,13 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
       cancelText: '取消',
       okType: 'danger',
       onOk: () => {
-        const allFileIds = getAllFileIdsInTree(files);
+        const allFileIds = getAllFileIdsInTree(props.files);
 
-        if (onRemoveFiles && allFileIds.length > 0) {
-          onRemoveFiles(allFileIds, targetType);
+        if (props.onRemoveFiles && allFileIds.length > 0) {
+          props.onRemoveFiles(allFileIds, props.targetType);
         }
 
-        onSetFiles([]); // This will trigger useEffect to update selectedFileId and renderedDocument
+        props.onSetFiles([]); // This will trigger useEffect to update selectedFileId and renderedDocument
         message.success('所有文件和文件夹已清除。');
       },
     });
@@ -428,7 +282,7 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
   const handleItemSelectInTree = (item: AnnotationDocumentItem) => {
     if (item.type === 'folder') {
       // Toggle expansion
-      onSetFiles(currentFiles => updateItemInTree(currentFiles, item.id, { isExpanded: !item.isExpanded }));
+      props.onSetFiles(currentFiles => updateItemInTree(currentFiles, item.id, { isExpanded: !item.isExpanded }));
       // Optionally, select the folder itself or do nothing for selection
       // setSelectedFileId(item.id); // If you want to "select" folders to show info or clear editor
     } else {
@@ -440,7 +294,7 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
 
   const getAllFileIdsFromSubtree = (itemId: string): string[] => {
     const ids: string[] = [];
-    const item = findItemById(files, itemId);
+    const item = findItemById(props.files, itemId);
 
     function collect(currentItem: AnnotationDocumentItem) {
       if (currentItem.type === 'file') {
@@ -458,7 +312,7 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
   };
 
   const handleDeleteFileFromTree = (itemIdToDelete: string) => {
-    const itemToDelete = findItemById(files, itemIdToDelete);
+    const itemToDelete = findItemById(props.files, itemIdToDelete);
     if (!itemToDelete) return;
 
     const confirmMsg = itemToDelete.type === 'folder'
@@ -473,16 +327,16 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
       onOk: () => {
         const idsToRemove = getAllFileIdsFromSubtree(itemIdToDelete);
 
-        if (onRemoveFiles && idsToRemove.length > 0) {
-          onRemoveFiles(idsToRemove, targetType);
-        } else if (onRemoveFile && idsToRemove.length === 1 && itemToDelete.type === 'file') { // Fallback for single file if onRemoveFiles not provided
-          onRemoveFile(idsToRemove[0], targetType);
+        if (props.onRemoveFiles && idsToRemove.length > 0) {
+          props.onRemoveFiles(idsToRemove, props.targetType);
+        } else if (props.onRemoveFile && idsToRemove.length === 1 && itemToDelete.type === 'file') { // Fallback for single file if onRemoveFiles not provided
+          props.onRemoveFile(idsToRemove[0], props.targetType);
         }
 
-        onSetFiles(currentFiles => removeItemFromTree(currentFiles, itemIdToDelete));
+        props.onSetFiles(currentFiles => removeItemFromTree(currentFiles, itemIdToDelete));
 
         if (selectedFileId === itemIdToDelete || (itemToDelete.type === 'folder' && selectedFileId && idsToRemove.includes(selectedFileId))) {
-          const firstFile = findFirstFile(files.filter(f => f.id !== itemIdToDelete)); // Check remaining files
+          const firstFile = findFirstFile(props.files.filter(f => f.id !== itemIdToDelete)); // Check remaining files
           setSelectedFileId(firstFile ? firstFile.id : null);
         }
         message.success(`${itemToDelete.type === 'folder' ? '文件夹' : '文件'} "${itemToDelete.name}" 已删除`);
@@ -510,7 +364,7 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
         return;
       }
 
-      const targetFile = findItemById(files, selectedFileId); // Get current file data
+      const targetFile = findItemById(props.files, selectedFileId); // Get current file data
       if (!targetFile || targetFile.type !== 'file' || !targetFile.content) {
         console.error('Cannot find target file or its content for selection');
         return;
@@ -519,7 +373,7 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
       const rect = range.getBoundingClientRect();
       setSelectionPosition(rect);
 
-      const editorDiv = editorContentRef.current.querySelector(targetType === 'code' ? 'pre.document-block' : 'div.document-block');
+      const editorDiv = editorContentRef.current.querySelector(props.targetType === 'code' ? 'pre.document-block' : 'div.document-block');
       if (editorDiv && editorDiv instanceof HTMLElement) {
         const [start, end] = renderedDocument.getSourceDocumentRange(editorDiv, range);
         if (end - start > 0) {
@@ -547,15 +401,15 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
 
   const handleAddToAnnotation = (annotationId?: string, createNew = false) => {
     if (!selectedRange) {
-      message.warning(`请先选择要标注的${targetTypeName}`);
+      message.warning(`请先选择要标注的${props.targetTypeName}`);
       return;
     }
-    onAddToAnnotation?.({
+    props.onAddToAnnotation?.({
       start: selectedRange.start,
       end: selectedRange.end,
       content: selectedRange.content,
       documentId: selectedRange.documentId
-    }, targetType, annotationId, createNew);
+    }, props.targetType, annotationId, createNew);
     setSelectedRange(null);
     setSelectionPosition(null); // Clear selection rectangle
     window.getSelection()?.removeAllRanges();
@@ -563,21 +417,171 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
 
   const handleCreateAndApplyAnnotation = async () => {
     if (!selectedRange) {
-      message.warning(`请先选择要标注的${targetTypeName}`);
+      message.warning(`请先选择要标注的${props.targetTypeName}`);
       return;
     }
     handleAddToAnnotation(undefined, true);
   };
 
-  // Main rendering useEffect for editor content
+  const loadContentForFile = useCallback(async (fileId: string, filePath: string) => {
+    // No longer directly sets isLoadingContent or renderedDocument here.
+    // This will be handled by the useEffect hook observing selectedFileId and files changes.
+    try {
+      const contentBuffer = await window.localFunctionality.retrieveLocalResource(filePath);
+      if (contentBuffer) {
+        const encoding = jschardet.detect(Buffer.from(contentBuffer)).encoding ?? 'GB18030';  // 难以检测，所以默认为 GB18030，见 https://github.com/aadsm/jschardet/issues/49
+        const content = new TextDecoder(encoding).decode(contentBuffer);
+        props.onSetFiles(prevFiles => updateItemInTree(prevFiles, fileId, { content }));
+        // The useEffect for selectedFileId will pick up this change in 'files'
+        // and then create the RenderedDocument.
+      } else {
+        throw new Error('File content is empty or could not be retrieved.');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`Error loading content for ${filePath}:`, errorMessage);
+      message.error(`加载文件内容失败: ${errorMessage}`);
+      // Store error in the file item itself for potential display
+      props.onSetFiles(prevFiles => updateItemInTree(prevFiles, fileId, { content: `Error loading content: ${errorMessage}` }));
+      // The useEffect for selectedFileId will see this error content and can decide how to display it.
+    }
+  }, [props.onSetFiles, updateItemInTree]);
+
+  // Effect Init: handle mouse down event on editor to clear selection
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const panelCard = (editorContentRef.current?.closest('.panel'));
+      if (panelCard && !panelCard.contains(event.target as Node)) {
+        if (editorContentRef.current && editorContentRef.current.contains(event.target as Node)) {
+          // Click is inside editor view but might be on scrollbars etc.
+          // This case is tricky, rely on onMouseDownOnEditor for clearing selection within editor.
+          return;
+        }
+        // Click is truly outside the panel that contains the editor.
+        setSelectedRange(null);
+        setSelectionPosition(null);
+        // window.getSelection()?.removeAllRanges(); // Be careful with this, might interfere with other inputs
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Effect: select the first matched file when files are loaded or changed
+  useEffect(() => {
+    // if files array changed, keep the same selected file if it still exists
+    if (selectedFileId) {
+      const currentFile = findItemById(props.files, selectedFileId);
+      if (!currentFile) {
+      // If selected file is removed, select first available file
+      const firstFile = findFirstFile(props.files);
+      setSelectedFileId(firstFile ? firstFile.id : null);
+      }
+    } else if (props.files.length > 0) {
+      // No file selected but files exist, select first file
+      const firstFile = findFirstFile(props.files);
+      if (firstFile) {
+      setSelectedFileId(firstFile.id);
+      }
+    } else {
+      // No files exist
+      setSelectedFileId(null);
+      setRenderedDocument(null);
+    }
+  }, [props.files, selectedFileId, findItemById, findFirstFile]);
+
+  // Effect: set newly range revealed file
+  useEffect(() => {
+    const newlySelectedItem = props.files.flatMap(f => f.isNewlySelectedInPanel ? [f] : (f.children ? f.children.filter(cf => cf.isNewlySelectedInPanel) : [])).find(i => i); // Simplified search
+
+    if (newlySelectedItem) {
+      const itemInTree = findItemById(props.files, newlySelectedItem.id); // Ensure we use the item from the current tree state
+      if (itemInTree) {
+        setSelectedFileId(itemInTree.id);
+        // If it's a file and content is not loaded, loadContentForFile will be triggered by another useEffect
+        // If it's a folder, we might want to expand its parents (not implemented here yet)
+
+        // Remove the flag using functional update to onSetFiles
+        // onSetFiles(currentFiles => updateItemInTree(currentFiles, itemInTree.id, { isNewlySelectedInPanel: false }));
+        props.files.splice(0, props.files.length, ...updateItemInTree(props.files, itemInTree.id, { isNewlySelectedInPanel: false }));
+      }
+    }
+  }, [props.files, findItemById, updateItemInTree]);
+
+  // Effect: manage loading and preparing RenderedDocument based on selectedFileId and files content
+  useEffect(() => {
+    if (!selectedFileId) {
+      setRenderedDocument(null);
+      setIsLoadingContent(false);
+      return;
+    }
+
+    const item = findItemById(props.files, selectedFileId);
+
+    if (!item || item.type === 'folder') {
+      setRenderedDocument(null);
+      setIsLoadingContent(false);
+      return;
+    }
+
+    // At this point, item is a file
+    // Always clear old document and set loading when selection changes or content might be loading
+    setRenderedDocument(null);
+    setIsLoadingContent(true);
+
+    if (item.content !== undefined && !item.content.startsWith('Error loading content:')) {
+      // Content is already loaded and not an error message
+      if (!item.renderedDocument) {
+        item.renderedDocument = new RenderedDocument(item.content, props.targetType === 'code' ? 'code' : 'markdown', item.localPath);
+      }
+      const doc = item.renderedDocument;
+
+      setRenderedDocument(doc);
+      setIsLoadingContent(false);
+
+      // doc.resolveLocalResources().then(() => {
+      //   if (selectedFileId === item.id) { // Check if selection is still current
+      //     setRenderedDocument(doc);
+      //     setIsLoadingContent(false);
+      //   }
+      // }).catch(err => {
+      //   console.error("Error resolving resources for pre-loaded content:", err);
+      //   if (selectedFileId === item.id) {
+      //     message.error('资源解析失败');
+      //     // Optionally, store this error state in a way the rendering useEffect can display it
+      //     // For now, renderedDocument remains null, and isLoadingContent will be set to false.
+      //     setIsLoadingContent(false);
+      //   }
+      // });
+    } else if (item.content && item.content.startsWith('Error loading content:')) {
+      // Content is an error message from a previous load attempt
+      // renderedDocument remains null, display the error via main rendering useEffect
+      setIsLoadingContent(false);
+    } else if (item.localPath) {
+      // Content needs to be fetched. loadContentForFile will update 'files',
+      // which will cause this useEffect to re-run. isLoadingContent is already true.
+      loadContentForFile(selectedFileId, item.localPath);
+    } else {
+      // File item, but no content and no path to load it
+      message.error('文件内容无法加载 (无内容信息且无本地路径)');
+      setIsLoadingContent(false);
+      // renderedDocument is already null
+    }
+
+  }, [selectedFileId, props.files, props.targetType, loadContentForFile, findItemById]);
+
+  // Effect: main rendering for editor content
   useEffect(() => {
     if (!editorContentRef.current) return;
     const editorDiv = editorContentRef.current;
 
-    const currentFileItem = selectedFileId ? findItemById(files, selectedFileId) : null;
+    const currentFileItem = selectedFileId ? findItemById(props.files, selectedFileId) : null;
 
     if (!selectedFileId || !currentFileItem) {
-      editorDiv.innerHTML = `<div style="padding: 20px; text-align: center; color: #aaa;">${files.length > 0 ? '请选择一个文件查看内容。' : '请导入文件或文件夹。'}</div>`;
+      editorDiv.innerHTML = `<div style="padding: 20px; text-align: center; color: #aaa;">${props.files.length > 0 ? '请选择一个文件查看内容。' : '请导入文件或文件夹。'}</div>`;
       return;
     }
 
@@ -603,8 +607,8 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
 
     editorDiv.innerHTML = '';
 
-    const contentHostElement = document.createElement(targetType === 'code' ? 'pre' : 'div');
-    contentHostElement.className = 'document-block' + (targetType === 'code' ? '' : ' doc-block');
+    const contentHostElement = document.createElement(props.targetType === 'code' ? 'pre' : 'div');
+    contentHostElement.className = 'document-block' + (props.targetType === 'code' ? '' : ' doc-block');
     editorDiv.appendChild(contentHostElement);
 
     (async () => {
@@ -612,18 +616,19 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
         try {
           setIsLoadingContent(true);
 
-          contentHostElement.innerHTML = await currentFileItem.renderedDocument.renderWithLocalResource();
+          const renderedElement = await currentFileItem.renderedDocument.renderElementWithLocalResource();
+          contentHostElement.replaceChildren(renderedElement);
           // Prism.highlightAllUnder(contentHostElement);
 
           // requestAnimationFrame(() => {
 
           if (!editorContentRef.current || !editorDiv.contains(contentHostElement) || !selectedFileId || selectedFileId !== currentFileItem.id) return;
 
-          const stillSelectedFile = findItemById(files, selectedFileId);
+          const stillSelectedFile = findItemById(props.files, selectedFileId);
           if (stillSelectedFile && stillSelectedFile.id === currentFileItem.id && currentFileItem.renderedDocument) {
-            const currentTargetRangesType = targetType === 'code' ? 'codeRanges' : 'docRanges';
+            const currentTargetRangesType = props.targetType === 'code' ? 'codeRanges' : 'docRanges';
 
-            const currentColoredRanges: ColorSetUp[] = annotations.flatMap(annotation => {
+            const currentColoredRanges: ColorSetUp[] = props.annotations.flatMap(annotation => {
               const annotationColor = annotation.color || '#CCCCCC'; // Default color if annotation.color is undefined
               const rangesFromAnnotation = annotation[currentTargetRangesType] || [];
 
@@ -652,14 +657,14 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
                   handleClick: (e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    onRevealAnnotationRange?.(annotation.id, targetType, docRange.index);
+                    props.onRevealAnnotationRange?.(annotation.id, props.targetType, docRange.index);
                   },
                   handleRightClick: (e, docRange) => {
                     // clickedRangeId is docRange.id.
                     // The 'docRange' object (full DocumentRange) is captured in this closure.
                     e.preventDefault();
                     e.stopPropagation();
-                    onRemoveAnnotationRange?.(docRange, targetType, annotation.id);
+                    props.onRemoveAnnotationRange?.(docRange, props.targetType, annotation.id);
                   }
                 };
               });
@@ -676,43 +681,23 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
         }
       }
     })();
-  }, [selectedFileId, targetType, annotations]);
+  }, [selectedFileId, props.targetType, props.annotations]);
 
+  // Effect: loading visual effects (e.g. for range revealed file)
   useEffect(() => {
     if (isLoadingContent) {
       return;
     }
 
-    const currentFileItem = selectedFileId ? findItemById(files, selectedFileId) : null;
+    const currentFileItem = selectedFileId ? findItemById(props.files, selectedFileId) : null;
 
     if (currentFileItem && currentFileItem.afterRender) {
       currentFileItem.afterRender();
       currentFileItem.afterRender = undefined;
     }
-  }, [files, isLoadingContent]);
+  }, [props.files, isLoadingContent]);
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const panelCard = (editorContentRef.current?.closest('.panel'));
-      if (panelCard && !panelCard.contains(event.target as Node)) {
-        if (editorContentRef.current && editorContentRef.current.contains(event.target as Node)) {
-          // Click is inside editor view but might be on scrollbars etc.
-          // This case is tricky, rely on onMouseDownOnEditor for clearing selection within editor.
-          return;
-        }
-        // Click is truly outside the panel that contains the editor.
-        setSelectedRange(null);
-        setSelectionPosition(null);
-        // window.getSelection()?.removeAllRanges(); // Be careful with this, might interfere with other inputs
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-
+  // Effect: scroll to top when selected file changes
   useEffect(() => {
     if (!editorContentRef.current) return;
     const editorDiv = editorContentRef.current;
@@ -728,17 +713,17 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
             title={item.name}
             className={classNames('file-tree-item', { 'selected-file': selectedFileId === item.id })}
             style={{
-              padding: '3px 0',
+              padding: '0',
             }}
           >
             <div
               onClick={() => handleItemSelectInTree(item)}
               style={{
                 cursor: 'pointer',
-                padding: '5px 8px',
+                padding: '2px 8px',
                 borderRadius: '3px',
                 backgroundColor: selectedFileId === item.id ? '#e6f7ff' : 'transparent',
-                borderLeft: selectedFileId === item.id ? '3px solid #1890ff' : 'none',
+                borderLeft: selectedFileId === item.id ? '3px solid #1890ff' : '3px solid transparent',
                 display: 'flex',
                 alignItems: 'center',
                 whiteSpace: 'nowrap',
@@ -775,7 +760,7 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
 
   return (
     <Card
-      title={targetTypeName}
+      title={props.targetTypeName}
       extra={
         <div style={{ display: 'flex', gap: '8px' }}>
           <Upload
@@ -793,12 +778,12 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
           </Button>
         </div>
       }
-      className={classNames('panel', `panel-${targetType}`)}
+      className={classNames('panel', `panel-${props.targetType}`)}
       bodyStyle={{ display: 'flex', flexDirection: 'column', padding: 0, height: 'calc(100% - 57px)' }}
     >
       <div className="explorer-view">
-        {files.length > 0
-          ? renderFileTree(files, 0)
+        {props.files.length > 0
+          ? renderFileTree(props.files, 0)
           : <div style={{ textAlign: 'center', color: '#aaa', padding: '20px' }}>无文件或文件夹。请点击上方按钮导入。</div>
         }
       </div>
@@ -814,7 +799,7 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = ({
       {selectedRange && selectionRectangle &&
         <FloatingToolbar
           rect={selectionRectangle}
-          searchAnnotations={searchAnnotations}
+          searchAnnotations={props.handleSearchAnnotations}
           onAddToAnnotation={handleAddToAnnotation} // Ensured presence
           onCreateAndApplyAnnotation={handleCreateAndApplyAnnotation} // Ensured presence
         />

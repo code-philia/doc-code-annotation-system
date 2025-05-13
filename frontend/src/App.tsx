@@ -1,14 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Layout, Button, Space, message, Upload, Flex, Modal, Input } from 'antd';
-import { RobotOutlined, DownloadOutlined, QuestionOutlined, SettingOutlined, UploadOutlined, FileAddOutlined } from '@ant-design/icons';
+import React, { useEffect, useRef, useState } from 'react';
+
+import { DownloadOutlined, FileAddOutlined, QuestionOutlined, RobotOutlined, SettingOutlined, UploadOutlined } from '@ant-design/icons';
+import type { UploadProps } from 'antd';
+import { Button, Flex, Input, Layout, message, Modal, Space, Upload } from 'antd';
+import AnnotationDocumentPanel from 'components/AnnotationContentPanel';
+import { computeLighterColor, generateUUID, getRandomColor } from 'components/utils';
+import { useCrossViewStateStore } from 'crossViewState';
+import OpenAI from "openai";
+
+import './App.css';
 import AnnotationPanel from './components/AnnotationPanel';
 import { Annotation, AnnotationDocumentItem, DocumentRange } from './types';
-import './App.css';
-import type { UploadProps } from 'antd';
-import { computeLighterColor, generateUUID, getRandomColor, RenderedDocument } from 'components/utils';
-import { useCrossViewStateStore } from 'crossViewState';
-import AnnotationDocumentPanel from 'components/AnnotationContentPanel';
-import OpenAI from "openai";
 
 const { Sider, Content } = Layout;
 
@@ -849,7 +851,7 @@ const App: React.FC = () => {
           <AnnotationDocumentPanel
             files={docFiles}
             onSetFiles={setDocFiles}
-            searchAnnotations={searchAnnotations}
+            handleSearchAnnotations={searchAnnotations}
             targetType='doc'
             targetTypeName='文档'
             onUpload={handleCodeUpload}
@@ -862,7 +864,7 @@ const App: React.FC = () => {
           <AnnotationDocumentPanel
             files={codeFiles}
             onSetFiles={setCodeFiles}
-            searchAnnotations={searchAnnotations}
+            handleSearchAnnotations={searchAnnotations}
             targetType="code"
             targetTypeName='代码'
             onUpload={handleCodeUpload}
