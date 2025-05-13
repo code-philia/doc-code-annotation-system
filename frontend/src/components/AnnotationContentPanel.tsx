@@ -32,11 +32,30 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = (props) =
   const [selectionRectangle, setSelectionPosition] = useState<DOMRect | null>(null);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
 
-  const [renderedDocument, setRenderedDocument] = useState<RenderedDocument | null>(null);
-  const [isLoadingContent, setIsLoadingContent] = useState<boolean>(false);
+  const [pendingRenderedDocumentElement, setPendingRenderedDocumentElement] = useState<HTMLElement | null>(null);
+  const [renderedDocumentElement, setRenderedDocumentElement] = useState<HTMLElement | null>(null);
+
+  const [isLoadingContent, setIsLoadingContent] = useState<'pending' | 'loading' | 'finished'>('finished');   // 'pending' 300ms then set it to 'loading'
 
   const editorContentRef = useRef<HTMLDivElement | null>(null);
   const cachedSelectedRange = useRef<Range | null>(null);
+
+  const cache = useCachedRenderedDocumentElements();
+
+  const delayedSetIsLoadingContent = () => {
+    setIsLoadingContent('loading');
+
+    // FIXME this does not work, React rendering is synchronous, and this setTimeout will be trigger after render
+    // consider removing it or discovering another way
+
+    // setIsLoadingContent('pending');
+
+    // setTimeout(() => {
+    //   setIsLoadingContent(state => {
+    //     return state === 'pending' ? 'loading' : state
+    //   });
+    // }, 30);
+  }
 
   const findItemById = useCallback((items: AnnotationDocumentItem[], id: string): AnnotationDocumentItem | null => {
     for (const item of items) {
@@ -352,7 +371,7 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = (props) =
 
   const handleCodeSelection = async () => {
     const selection = window.getSelection();
-    if (!selection || selection.isCollapsed || !selectedFileId || !renderedDocument) {
+    if (!selection || selection.isCollapsed || !selectedFileId) {
       setSelectedRange(null);
       setSelectionPosition(null);
       return;
@@ -374,8 +393,11 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = (props) =
       setSelectionPosition(rect);
 
       const editorDiv = editorContentRef.current.querySelector(props.targetType === 'code' ? 'pre.document-block' : 'div.document-block');
-      if (editorDiv && editorDiv instanceof HTMLElement) {
-        const [start, end] = renderedDocument.getSourceDocumentRange(editorDiv, range);
+
+      const currentFileItem = selectedFileId ? findItemById(props.files, selectedFileId) : null;
+
+      if (editorDiv && editorDiv instanceof HTMLElement && currentFileItem && currentFileItem.renderedDocument) {
+        const [start, end] = currentFileItem.renderedDocument.getSourceDocumentRange(editorDiv, range);
         if (end - start > 0) {
           cachedSelectedRange.current = range;
           setSelectedRange({
@@ -476,20 +498,19 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = (props) =
     if (selectedFileId) {
       const currentFile = findItemById(props.files, selectedFileId);
       if (!currentFile) {
-      // If selected file is removed, select first available file
-      const firstFile = findFirstFile(props.files);
-      setSelectedFileId(firstFile ? firstFile.id : null);
+        // If selected file is removed, select first available file
+        const firstFile = findFirstFile(props.files);
+        setSelectedFileId(firstFile ? firstFile.id : null);
       }
     } else if (props.files.length > 0) {
       // No file selected but files exist, select first file
       const firstFile = findFirstFile(props.files);
       if (firstFile) {
-      setSelectedFileId(firstFile.id);
+        setSelectedFileId(firstFile.id);
       }
     } else {
       // No files exist
       setSelectedFileId(null);
-      setRenderedDocument(null);
     }
   }, [props.files, selectedFileId, findItemById, findFirstFile]);
 
@@ -514,33 +535,22 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = (props) =
   // Effect: manage loading and preparing RenderedDocument based on selectedFileId and files content
   useEffect(() => {
     if (!selectedFileId) {
-      setRenderedDocument(null);
-      setIsLoadingContent(false);
+      setIsLoadingContent('finished');
       return;
     }
 
     const item = findItemById(props.files, selectedFileId);
 
     if (!item || item.type === 'folder') {
-      setRenderedDocument(null);
-      setIsLoadingContent(false);
+      setIsLoadingContent('finished');
       return;
     }
-
-    // At this point, item is a file
-    // Always clear old document and set loading when selection changes or content might be loading
-    setRenderedDocument(null);
-    setIsLoadingContent(true);
 
     if (item.content !== undefined && !item.content.startsWith('Error loading content:')) {
       // Content is already loaded and not an error message
       if (!item.renderedDocument) {
         item.renderedDocument = new RenderedDocument(item.content, props.targetType === 'code' ? 'code' : 'markdown', item.localPath);
       }
-      const doc = item.renderedDocument;
-
-      setRenderedDocument(doc);
-      setIsLoadingContent(false);
 
       // doc.resolveLocalResources().then(() => {
       //   if (selectedFileId === item.id) { // Check if selection is still current
@@ -559,7 +569,7 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = (props) =
     } else if (item.content && item.content.startsWith('Error loading content:')) {
       // Content is an error message from a previous load attempt
       // renderedDocument remains null, display the error via main rendering useEffect
-      setIsLoadingContent(false);
+      setIsLoadingContent('finished');
     } else if (item.localPath) {
       // Content needs to be fetched. loadContentForFile will update 'files',
       // which will cause this useEffect to re-run. isLoadingContent is already true.
@@ -567,13 +577,12 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = (props) =
     } else {
       // File item, but no content and no path to load it
       message.error('文件内容无法加载 (无内容信息且无本地路径)');
-      setIsLoadingContent(false);
+      setIsLoadingContent('finished');
       // renderedDocument is already null
     }
-
   }, [selectedFileId, props.files, props.targetType, loadContentForFile, findItemById]);
 
-  // Effect: main rendering for editor content
+  // Effect: render editor state
   useEffect(() => {
     if (!editorContentRef.current) return;
     const editorDiv = editorContentRef.current;
@@ -590,7 +599,7 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = (props) =
       return;
     }
 
-    if (isLoadingContent) {
+    if (isLoadingContent === 'loading') {
       editorDiv.innerHTML = '<div style="padding: 20px; text-align: center; color: #aaa;">正在加载内容...</div>';
       return;
     }
@@ -604,31 +613,24 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = (props) =
       editorDiv.innerHTML = '<div style="padding: 20px; text-align: center; color: #aaa;">内容加载失败或不可用。</div>';
       return;
     }
+  }, [selectedFileId, isLoadingContent]);
 
-    editorDiv.innerHTML = '';
-
-    const contentHostElement = document.createElement(props.targetType === 'code' ? 'pre' : 'div');
-    contentHostElement.className = 'document-block' + (props.targetType === 'code' ? '' : ' doc-block');
-    editorDiv.appendChild(contentHostElement);
-
+  // Effect: main rendering for editor content
+  useEffect(() => {
     (async () => {
+      if (!editorContentRef.current) return;
+      const editorDiv = editorContentRef.current;
+
+      const currentFileItem = selectedFileId ? findItemById(props.files, selectedFileId) : null;
+      if (!currentFileItem) return;
+
       if (selectedFileId === currentFileItem.id && currentFileItem.renderedDocument) {
         try {
-          setIsLoadingContent(true);
-
-          const renderedElement = await currentFileItem.renderedDocument.renderElementWithLocalResource();
-          contentHostElement.replaceChildren(renderedElement);
-          // Prism.highlightAllUnder(contentHostElement);
-
-          // requestAnimationFrame(() => {
-
-          if (!editorContentRef.current || !editorDiv.contains(contentHostElement) || !selectedFileId || selectedFileId !== currentFileItem.id) return;
-
           const stillSelectedFile = findItemById(props.files, selectedFileId);
           if (stillSelectedFile && stillSelectedFile.id === currentFileItem.id && currentFileItem.renderedDocument) {
             const currentTargetRangesType = props.targetType === 'code' ? 'codeRanges' : 'docRanges';
 
-            const currentColoredRanges: ColorSetUp[] = props.annotations.flatMap(annotation => {
+            const currentColorSetUps: ColorSetUp[] = props.annotations.flatMap(annotation => {
               const annotationColor = annotation.color || '#CCCCCC'; // Default color if annotation.color is undefined
               const rangesFromAnnotation = annotation[currentTargetRangesType] || [];
 
@@ -670,22 +672,56 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = (props) =
               });
             });
 
-            currentFileItem.renderedDocument.colorAll(contentHostElement, currentColoredRanges);
+            const fetchFn = async (item: AnnotationDocumentItem, setups: ColorSetUp[]) => {
+              const contentHostElement = document.createElement(props.targetType === 'code' ? 'pre' : 'div');
+              contentHostElement.className = 'document-block' + (props.targetType === 'code' ? '' : ' doc-block');
+
+              if (!item.renderedDocument) {
+                return contentHostElement;
+              }
+
+              delayedSetIsLoadingContent();
+
+              const renderedHtml = await item.renderedDocument.renderWithLocalResource();
+              contentHostElement.innerHTML = renderedHtml;
+              item.renderedDocument?.colorAll(contentHostElement, setups);
+
+              return contentHostElement;
+            }
+
+            const contentHostElement = await cache.fetch(currentFileItem, currentColorSetUps, fetchFn);
+
+            if (pendingRenderedDocumentElement !== contentHostElement) {
+              delayedSetIsLoadingContent();
+              setPendingRenderedDocumentElement(contentHostElement);      // this is sync, setTimeout setting 'loading' will be postponed
+            } else {
+              setIsLoadingContent('finished');
+            }
+
             cachedSelectedRange.current = null;
           }
         } catch (error) {
           console.error('Rendering error:', error);
           editorDiv.innerHTML = '<div style="color: #dd0000; padding: 20px;">内容渲染失败</div>';
-        } finally {
-          setIsLoadingContent(false);
         }
       }
     })();
-  }, [selectedFileId, props.targetType, props.annotations]);
+  }, [selectedFileId, isLoadingContent, props.targetType, props.annotations]);
+
+  useEffect(() => {
+    if (!editorContentRef.current) return;
+
+    if (renderedDocumentElement !== pendingRenderedDocumentElement && pendingRenderedDocumentElement) {
+      setRenderedDocumentElement(pendingRenderedDocumentElement);
+      editorContentRef.current.replaceChildren(pendingRenderedDocumentElement);
+    } else {
+      setIsLoadingContent('finished');
+    }
+  }, [renderedDocumentElement, pendingRenderedDocumentElement]);
 
   // Effect: loading visual effects (e.g. for range revealed file)
   useEffect(() => {
-    if (isLoadingContent) {
+    if (isLoadingContent !== 'finished') {
       return;
     }
 
@@ -794,7 +830,6 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = (props) =
         onMouseDown={handleMouseDownOnEditor} // Ensured presence
         onMouseUp={handleCodeSelection}   // Ensured presence
       >
-        {/* Content rendered by useEffect */}
       </div>
       {selectedRange && selectionRectangle &&
         <FloatingToolbar
@@ -807,6 +842,8 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = (props) =
     </Card>
   );
 };
+
+export default AnnotationDocumentPanel;
 
 interface FloatingToolbarProps {
   rect: DOMRect;
@@ -917,4 +954,56 @@ const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
   );
 };
 
-export default AnnotationDocumentPanel;
+function useCachedRenderedDocumentElements() {
+  type RenderIndVar = { sourceContent: string, annotationColorSets: ColorSetUp[] };
+
+  type RenderEntry = {
+    record: RenderIndVar,
+    value: HTMLElement
+  }
+
+  // do not use a weak map, do not rely on AnnotationDocumentItem itself to identify the file item, it is just a shadow on rendering ui
+  // use its id, in data perspective
+  const cache = useRef<Map<string, RenderEntry>>(new Map<string, RenderEntry>());
+
+  const eqFnColorSetUp = (a: ColorSetUp, b: ColorSetUp) => {
+    return (
+      a.color === b.color &&
+      a.ranges.every((r, i) =>
+        r.start === b.ranges[i].start && r.end === b.ranges[i].end
+      )
+    );
+  };
+  const eqFn = (a: RenderIndVar, b: RenderIndVar): boolean => {
+    return (
+      a.sourceContent === b.sourceContent &&
+      a.annotationColorSets.length === b.annotationColorSets.length &&
+      a.annotationColorSets.every((aSetup, index) => {
+        const bSetup = b.annotationColorSets[index];
+        if (!bSetup) return false;
+        return eqFnColorSetUp(aSetup, bSetup);
+      })
+    );
+  }
+
+  const setCachedElement = (item: AnnotationDocumentItem, setups: ColorSetUp[], element: HTMLElement) => {
+    cache.current.set(item.id, { record: { sourceContent: item.content || '', annotationColorSets: setups }, value: element });
+  };
+
+  const fetchCachedElement = async (item: AnnotationDocumentItem, setups: ColorSetUp[], fetchFn: (item: AnnotationDocumentItem, setups: ColorSetUp[]) => HTMLElement | Promise<HTMLElement>): Promise<HTMLElement> => {
+    const entry = cache.current.get(item.id);
+    if (entry && eqFn(entry.record, { sourceContent: item.content || '', annotationColorSets: setups })) {
+      return entry.value;
+    }
+
+    const value = await fetchFn(item, setups);
+    setCachedElement(item, setups, value);
+    return value;
+  };
+
+  return { fetch: fetchCachedElement };
+}
+
+function useLoadingState() {
+
+}

@@ -1,18 +1,18 @@
+import { CSSProperties } from 'react';
+
 import ColorConvert from 'color-convert';
 import { State } from 'mdast-util-to-hast';
 import { Parents } from 'mdast-util-to-hast/lib/handlers/list-item';
 import rehypeKatex from 'rehype-katex';
-import rehypeSanitize from 'rehype-sanitize';    // NOTE sanitize will remove custom parse-start and parse-end attributes
 import rehypeStringify from 'rehype-stringify';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import remarkParse from 'remark-parse';
-import remarkRehype from 'remark-rehype';
-import { defaultHandlers } from 'remark-rehype';
-import { DocumentRange } from 'types';
-import { unified } from 'unified';
+import remarkRehype, { defaultHandlers } from 'remark-rehype';
 import { trimLines } from 'trim-lines';
-import { CSSProperties } from 'react';
+import { unified } from 'unified';
+
+import { DocumentRange } from 'types';
 
 // UUID generation
 // FIXME small probability of collision
@@ -203,6 +203,7 @@ export interface ColorSetUp {
 export class RenderedDocument {
   sourceDocument: string;
   renderedDocument: string | undefined;
+  renderedDocumentElement: HTMLElement | undefined;
   localResourceBasePath: string | undefined;
   type: 'markdown' | 'code';
 
@@ -288,12 +289,30 @@ export class RenderedDocument {
     return this.renderedDocument;
   }
 
+  async renderElement(): Promise<HTMLElement> {
+    if (this.renderedDocumentElement === undefined) {
+      this.renderedDocumentElement = document.createElement('div');
+      this.renderedDocumentElement.className = 'annotation-rendered-document';
+      this.renderedDocumentElement.innerHTML = await this.render();
+    }
+    return this.renderedDocumentElement;
+  }
+
   async renderWithLocalResource(): Promise<string> {
     if (this.renderedDocument === undefined) {
       await this.resolveLocalResources();
       this.renderedDocument = await this.render();
     }
     return this.renderedDocument;
+  }
+
+  async renderElementWithLocalResource(): Promise<HTMLElement> {
+    if (this.renderedDocumentElement === undefined) {
+      this.renderedDocumentElement = document.createElement('div');
+      this.renderedDocumentElement.className = 'annotation-rendered-document';
+      this.renderedDocumentElement.innerHTML = await this.renderWithLocalResource();
+    }
+    return this.renderedDocumentElement;
   }
 
   getSourceDocumentRange(rootElement: HTMLElement, range: Range): [number, number] {
