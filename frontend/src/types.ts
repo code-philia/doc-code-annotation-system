@@ -1,4 +1,4 @@
-import { RenderedDocument } from "components/utils";
+import { RenderedDocument } from "./utils";
 
 export interface DocumentRange {
   start: number;

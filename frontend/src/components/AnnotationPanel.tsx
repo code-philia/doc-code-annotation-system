@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Button, Input, List, Modal, Form, message, Popconfirm } from 'antd';
-import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
+
+import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
+import { Button, Card, List, Popconfirm } from 'antd';
 import classNames from 'classnames';
+import { useCrossViewStateStore } from 'state';
+
 import { Annotation } from '../types';
-import { computeLighterColor } from './utils';
-import { useCrossViewStateStore } from 'crossViewState';
+import { computeLighterColor } from '../utils';
 
 interface AnnotationItemProps {
   className?: string;
@@ -16,26 +18,7 @@ interface AnnotationItemProps {
   onReveal: (rangeType: string, rangeIndex: number) => void;
 }
 
-interface AnnotationPanelProps {
-  className?: string;
-  annotations: Annotation[];
-  currentAnnotation?: Annotation | null;
-  onAnnotationCreate?: (category?: string) => void;
-  onAnnotationSelect?: (annotation: Annotation) => void;
-  onAnnotationDelete?: (annotationId: string) => void;
-  onAnnotationRename?: (annotationId: string, annotationName: string) => void;
-  onAnnotationReveal?: (annotationId: string, rangeType: string, rangeIndex: number) => void;
-}
-
-const AnnotationItem = ({
-  className,
-  annotation,
-  selected,
-  onClick,
-  onDelete,
-  onChangeName,
-  onReveal
-}: AnnotationItemProps) => {
+const AnnotationItem = (props: AnnotationItemProps) => {
   const [isNameBeingEdited, setIsNameBeingEdited] = useState(false);
   const shouldFocusOnRenameId = useCrossViewStateStore((state) => state.shouldFocusOnRenameId);
   const setShouldFocusOnRenameId = useCrossViewStateStore((state) => state.setShouldFocusOnRenameId);
@@ -43,25 +26,25 @@ const AnnotationItem = ({
   const handleDelete = (e?: React.MouseEvent<HTMLElement, MouseEvent> | undefined) => {
     if (e) {
       e.stopPropagation();
-      onDelete();
+      props.onDelete();
     }
   };
 
   useEffect(() => {
-    if (selected && shouldFocusOnRenameId === annotation.id) {
+    if (props.selected && shouldFocusOnRenameId === props.annotation.id) {
       setIsNameBeingEdited(true);
       setShouldFocusOnRenameId(undefined);
     }
-  }, [selected, shouldFocusOnRenameId])
+  }, [props.selected, shouldFocusOnRenameId])
 
   return (
     <div
-      className={`annotation-item${selected ? ' selected' : ''}${className ? ` ${className}` : ''}`}
-      onClick={onClick}
+      className={`annotation-item${props.selected ? ' selected' : ''}${props.className ? ` ${props.className}` : ''}`}
+      onClick={props.onClick}
       style={{
-        outlineColor: annotation.color ?? '#000000',
-        backgroundColor: annotation.color ? computeLighterColor(annotation.color) : computeLighterColor('#000000'),
-        outlineWidth: selected ? '2px' : '1px',
+        outlineColor: props.annotation.color ?? '#000000',
+        backgroundColor: props.annotation.color ? computeLighterColor(props.annotation.color) : computeLighterColor('#000000'),
+        outlineWidth: props.selected ? '2px' : '1px',
         outlineStyle: 'solid'
       }}
     >
@@ -71,13 +54,13 @@ const AnnotationItem = ({
             ? (
               <input
                 className="category"
-                title={annotation.category}
+                title={props.annotation.category}
                 style={{
-                  color: annotation.color ?? '#000000'
+                  color: props.annotation.color ?? '#000000'
                 }}
-                value={annotation.category}
+                value={props.annotation.category}
                 onBlur={() => setIsNameBeingEdited(false)}
-                onChange={(e) => onChangeName(e.target.value)}
+                onChange={(e) => props.onChangeName(e.target.value)}
                 onFocus={(e) => {
                   e.target.select();
                   e.target.scrollLeft = 0;
@@ -95,38 +78,38 @@ const AnnotationItem = ({
               <div
                 className="category"
                 onClick={() => setIsNameBeingEdited(!isNameBeingEdited)}
-                title={annotation.category}
+                title={props.annotation.category}
                 style={{
-                  color: annotation.color ?? '#000000'
+                  color: props.annotation.color ?? '#000000'
                 }}
               >
-                {annotation.category}
+                {props.annotation.category}
               </div>
             )
         }
         <div className="stats">
-          <div className="stat-tag">文档片段: {annotation.docRanges.length}</div>
-          <div className="stat-tag">代码片段: {annotation.codeRanges.length}</div>
+          <div className="stat-tag">文档片段: {props.annotation.docRanges.length}</div>
+          <div className="stat-tag">代码片段: {props.annotation.codeRanges.length}</div>
         </div>
       </div>
-      {(annotation.docRanges.length > 0 || annotation.codeRanges.length > 0) && (
+      {(props.annotation.docRanges.length > 0 || props.annotation.codeRanges.length > 0) && (
         <div className="range-preview">
-          {annotation.docRanges.map((range, index) => (
+          {props.annotation.docRanges.map((range, index) => (
             <div key={`doc-${index}`} className={`preview-content doc-content doc-range-${index}`}
-            onClick={() => onReveal('doc', index)}>
+            onClick={() => props.onReveal('doc', index)}>
               {range.content.replace(/!\[.*?\]\((.*?)\)/g, `![image](data:image/png;base64)`)}
             </div>
           ))}
-          {annotation.codeRanges.map((range, index) => (
+          {props.annotation.codeRanges.map((range, index) => (
             <div key={`code-${index}`} className={`preview-content code-content code-range-${index}`}
-            onClick={() => onReveal('code', index)}>
+            onClick={() => props.onReveal('code', index)}>
               {range.content}
             </div>
           ))}
         </div>
       )}
       <div className="update-time">
-        更新于 {new Date(annotation.updateTime).toLocaleString()}
+        更新于 {new Date(props.annotation.updateTime).toLocaleString()}
         <div className="actions">
           <Popconfirm
             title="确定要删除这个标注吗？"
@@ -151,16 +134,18 @@ const AnnotationItem = ({
   );
 };
 
-const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
-  className,
-  annotations = [],
-  currentAnnotation,
-  onAnnotationCreate,
-  onAnnotationSelect,
-  onAnnotationDelete,
-  onAnnotationRename,
-  onAnnotationReveal
-}) => {
+interface AnnotationPanelProps {
+  className?: string;
+  annotations: Annotation[];
+  currentAnnotation?: Annotation | null;
+  onAnnotationCreate?: (category?: string) => void;
+  onAnnotationSelect?: (annotation: Annotation) => void;
+  onAnnotationDelete?: (annotationId: string) => void;
+  onAnnotationRename?: (annotationId: string, annotationName: string) => void;
+  onAnnotationReveal?: (annotationId: string, rangeType: string, rangeIndex: number) => void;
+}
+
+const AnnotationPanel = (props: AnnotationPanelProps) => {
   return (
     <Card
       title="标注"
@@ -168,25 +153,25 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
         <Button
           type="primary"
           icon={<PlusOutlined />}
-          onClick={() => onAnnotationCreate?.()}
+          onClick={() => props.onAnnotationCreate?.()}
         >
         </Button>
       }
-      className={classNames('panel', className)}
+      className={classNames('panel', props.className)}
     >
       <div className="panel-content">
         <List
-          dataSource={annotations}
-          renderItem={(annotation, index) => (
+          dataSource={props.annotations}
+          renderItem={(annotation, _index) => (
             <List.Item>
               <AnnotationItem
                 className = {`annotation-item-${annotation.id}`}
                 annotation={annotation}
-                selected={currentAnnotation?.id === annotation.id}
-                onClick={() => onAnnotationSelect?.(annotation)}
-                onDelete={() => onAnnotationDelete?.(annotation.id)}
-                onChangeName={(name) => onAnnotationRename?.(annotation.id, name)}
-                onReveal={(rangeType, rangeIndex) => onAnnotationReveal?.(annotation.id, rangeType, rangeIndex)}
+                selected={props.currentAnnotation?.id === annotation.id}
+                onClick={() => props.onAnnotationSelect?.(annotation)}
+                onDelete={() => props.onAnnotationDelete?.(annotation.id)}
+                onChangeName={(name) => props.onAnnotationRename?.(annotation.id, name)}
+                onReveal={(rangeType, rangeIndex) => props.onAnnotationReveal?.(annotation.id, rangeType, rangeIndex)}
               />
             </List.Item>
           )}
@@ -197,15 +182,3 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
 };
 
 export default AnnotationPanel;
-
-function limitNameLength(name: string, limit: number = 7) {
-  const textEncoder = new TextEncoder();
-  const utf8Bytes = textEncoder.encode(name)
-
-  if (utf8Bytes.length <= limit) {
-    return name;
-  }
-
-  const textDecoder = new TextDecoder();
-  return textDecoder.decode(utf8Bytes).slice(0, limit - 2) + '...';
-}

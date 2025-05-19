@@ -4,9 +4,9 @@ import { DownloadOutlined, FileAddOutlined, QuestionOutlined, RobotOutlined, Set
 import type { UploadProps } from 'antd';
 import { Button, Flex, Input, Layout, message, Modal, Space, Upload } from 'antd';
 import AnnotationDocumentPanel from 'components/AnnotationContentPanel';
-import { computeLighterColor, generateUUID, getRandomColor } from 'components/utils';
-import { useCrossViewStateStore } from 'crossViewState';
 import OpenAI from "openai";
+import { useCrossViewStateStore } from 'state';
+import { computeLighterColor, generateUUID, getRandomColor } from 'utils';
 
 import './App.css';
 import AnnotationPanel from './components/AnnotationPanel';

@@ -6,9 +6,8 @@ import type { UploadFile } from 'antd/es/upload/interface';
 import classNames from 'classnames';
 import jschardet from 'jschardet';
 
-import * as api from '../services/api';
 import { Annotation, AnnotationDocumentItem, DocumentRange } from '../types';
-import { ColorSetUp, computeLighterColor, regularizeFileContent, RenderedDocument } from './utils';
+import { ColorDecoration, computeLighterColor, regularizeFileContent, RenderedDocument } from '../utils';
 
 interface AnnotationContentPanelProps {
   files: AnnotationDocumentItem[];
@@ -152,19 +151,18 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = (props) =
         content = new TextDecoder(encoding).decode(contentBytesBuffer);
       }
 
-      const result = await api.uploadCode(file); // This might need adjustment if it assumes flat structure
       content = regularizeFileContent(content);
 
       const newFileItem: AnnotationDocumentItem = {
-        id: file.url ?? result.id ?? `file-${Date.now()}-${Math.random()}`, // Ensure unique ID
+        id: file.url ?? `file-${Date.now()}-${Math.random()}`, // Ensure unique ID
         name: file.name,
         content: content,
         type: 'file', // Explicitly set type
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         localPath: (file as any).path, // For Electron
       };
 
       props.onSetFiles(currentFiles => [...currentFiles, newFileItem]);
-      props.onUpload?.(result); // This might also need context if it updates a global list
       message.success(`成功导入文件：${file.name}`);
       if (!selectedFileId) {
         setSelectedFileId(newFileItem.id);
@@ -201,6 +199,7 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = (props) =
         message.info('正在加载文件夹内容...', 0); // Display loading message, 0 means it won't auto-close
 
         // Async function to map raw tree and load file contents
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const mapRawTreeAndLoadContents = async (rawItems: any[]): Promise<AnnotationDocumentItem[]> => {
           return Promise.all(rawItems.map(async (rawItem): Promise<AnnotationDocumentItem> => {
             let fileContent: string | undefined = undefined;
@@ -630,7 +629,7 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = (props) =
           if (stillSelectedFile && stillSelectedFile.id === currentFileItem.id && currentFileItem.renderedDocument) {
             const currentTargetRangesType = props.targetType === 'code' ? 'codeRanges' : 'docRanges';
 
-            const currentColorSetUps: ColorSetUp[] = props.annotations.flatMap(annotation => {
+            const currentColorSetUps: ColorDecoration[] = props.annotations.flatMap(annotation => {
               const annotationColor = annotation.color || '#CCCCCC'; // Default color if annotation.color is undefined
               const rangesFromAnnotation = annotation[currentTargetRangesType] || [];
 
@@ -672,7 +671,7 @@ const AnnotationDocumentPanel: React.FC<AnnotationContentPanelProps> = (props) =
               });
             });
 
-            const fetchFn = async (item: AnnotationDocumentItem, setups: ColorSetUp[]) => {
+            const fetchFn = async (item: AnnotationDocumentItem, setups: ColorDecoration[]) => {
               const contentHostElement = document.createElement(props.targetType === 'code' ? 'pre' : 'div');
               contentHostElement.className = 'document-block' + (props.targetType === 'code' ? '' : ' doc-block');
 
@@ -955,7 +954,7 @@ const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
 };
 
 function useCachedRenderedDocumentElements() {
-  type RenderIndVar = { sourceContent: string, annotationColorSets: ColorSetUp[] };
+  type RenderIndVar = { sourceContent: string, annotationColorSets: ColorDecoration[] };
 
   type RenderEntry = {
     record: RenderIndVar,
@@ -966,7 +965,7 @@ function useCachedRenderedDocumentElements() {
   // use its id, in data perspective
   const cache = useRef<Map<string, RenderEntry>>(new Map<string, RenderEntry>());
 
-  const eqFnColorSetUp = (a: ColorSetUp, b: ColorSetUp) => {
+  const eqFnColorSetUp = (a: ColorDecoration, b: ColorDecoration) => {
     return (
       a.color === b.color &&
       a.ranges.every((r, i) =>
@@ -986,11 +985,11 @@ function useCachedRenderedDocumentElements() {
     );
   }
 
-  const setCachedElement = (item: AnnotationDocumentItem, setups: ColorSetUp[], element: HTMLElement) => {
+  const setCachedElement = (item: AnnotationDocumentItem, setups: ColorDecoration[], element: HTMLElement) => {
     cache.current.set(item.id, { record: { sourceContent: item.content || '', annotationColorSets: setups }, value: element });
   };
 
-  const fetchCachedElement = async (item: AnnotationDocumentItem, setups: ColorSetUp[], fetchFn: (item: AnnotationDocumentItem, setups: ColorSetUp[]) => HTMLElement | Promise<HTMLElement>): Promise<HTMLElement> => {
+  const fetchCachedElement = async (item: AnnotationDocumentItem, setups: ColorDecoration[], fetchFn: (item: AnnotationDocumentItem, setups: ColorDecoration[]) => HTMLElement | Promise<HTMLElement>): Promise<HTMLElement> => {
     const entry = cache.current.get(item.id);
     if (entry && eqFn(entry.record, { sourceContent: item.content || '', annotationColorSets: setups })) {
       return entry.value;
@@ -1002,8 +1001,4 @@ function useCachedRenderedDocumentElements() {
   };
 
   return { fetch: fetchCachedElement };
-}
-
-function useLoadingState() {
-
 }

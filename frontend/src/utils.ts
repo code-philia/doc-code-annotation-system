@@ -12,7 +12,7 @@ import remarkRehype, { defaultHandlers } from 'remark-rehype';
 import { trimLines } from 'trim-lines';
 import { unified } from 'unified';
 
-import { DocumentRange } from 'types';
+import { DocumentRange } from './types';
 
 // UUID generation
 // FIXME small probability of collision
@@ -20,11 +20,12 @@ export function generateUUID() {
   return crypto.randomUUID();
 }
 
+// Element-wise char offset algorithm
 // https://stackoverflow.com/questions/4811822/get-a-ranges-start-and-end-offsets-relative-to-its-parent-container
-export function getCaretCharacterOffsetWithin(container: Node, offset: number, element: Element, atStart = true): number | null {
+export function getCaretCharacterOffsetWithin(container: Node, offset: number, element: Element): number | null {
   let caretOffset: number | null = null;
 
-  var preCaretRange = new Range();
+  const preCaretRange = new Range();
   preCaretRange.selectNodeContents(element);
   preCaretRange.setEnd(container, offset);
   caretOffset = preCaretRange.toString().length;
@@ -56,7 +57,7 @@ function cyrb128(str: string) {
 function sfc32(a: number, b: number, c: number, d: number) {
   return function () {
     a |= 0; b |= 0; c |= 0; d |= 0;
-    let t = (a + b | 0) + d | 0;
+    const t = (a + b | 0) + d | 0;
     d = d + 1 | 0;
     a = b ^ b >>> 9;
     b = c + (c << 3) | 0;
@@ -158,7 +159,7 @@ export function getRandomColor(getExistingColorIterable: () => Iterable<string>)
 
   for (const c of cachedRandomColors) {
     it = getExistingColorIterable();
-    let notUsed = notInIterable(c, it);
+    const notUsed = notInIterable(c, it);
 
     if (notUsed) {
       return c;
@@ -174,12 +175,12 @@ export function getRandomColor(getExistingColorIterable: () => Iterable<string>)
   return newColor;
 }
 
-export function computeLighterColor(cssHexColor: string, coef: number = 0.2) {
+export function computeLighterColor(cssHexColor: string, coef: number = 0.03) {
   coef = Math.max(0, Math.min(1, coef));
 
   const hsl: [number, number, number] = ColorConvert.hex.hsl(cssHexColor);
 
-  hsl[2] = 100 - (100 - hsl[2]) * 0.03;
+  hsl[2] = 100 - (100 - hsl[2]) * coef;
 
   return '#' + ColorConvert.hsl.hex(hsl);
 }
@@ -187,7 +188,7 @@ export function computeLighterColor(cssHexColor: string, coef: number = 0.2) {
 // [Document (Now regularized as Markdown only) ↔ HTML ↔ Selection]
 // mapping and highlighting
 
-export interface ColorSetUp {
+export interface ColorDecoration {
   /** id for mapping */
   id: string;
   /** Offsets in a source document (a documentation or code source file) to be colored. */
@@ -196,6 +197,7 @@ export interface ColorSetUp {
   color: string;
   /** CSS-supported color attribute. */
   lighterColor: string;
+
   handleClick?: (e: MouseEvent, range: DocumentRange) => any;
   handleRightClick?: (e: MouseEvent, range: DocumentRange) => any;
 }
@@ -367,7 +369,7 @@ export class RenderedDocument {
     return range;
   }
 
-  colorOne(rootElement: HTMLElement, coloredRange: ColorSetUp) {
+  colorOne(rootElement: HTMLElement, coloredRange: ColorDecoration) {
     const coloredStyle: CSSProperties = {
       cursor: 'pointer',
       backgroundColor: coloredRange.lighterColor,
@@ -556,7 +558,7 @@ export class RenderedDocument {
           // parent.replaceChildren();   // NOTE While doing this, the range/selection that covers here will immediately be inactivated!
           colorText(currentNode, documentStartOffset);
         } else if (currentNode instanceof HTMLElement) {   // FIXME splitting doesn't work here now
-          let shouldColorAll =
+          const shouldColorAll =
             !currentNode.classList.contains('annotation-skip') &&   // if is each line of code, do not color its ::before element (line number)
             (
               !(startChild || endChild) ||                          // if no startChild or endChild is a splitting point of this element
@@ -633,7 +635,7 @@ export class RenderedDocument {
     return colorTasks;
   }
 
-  colorAll(rootElement: HTMLElement, coloredRanges: ColorSetUp[]) {
+  colorAll(rootElement: HTMLElement, coloredRanges: ColorDecoration[]) {
     const colorTasks: {
       w: number,
       task: () => void
@@ -691,8 +693,8 @@ function tableRowHandler(state: State, node: any, parent: Parents | undefined) {
     }
 
     if (cell) {
-      properties['parse-start'] = cell.position.start.offset,
-        properties['parse-end'] = cell.position.end.offset
+      properties['parse-start'] = cell.position.start.offset;
+      properties['parse-end'] = cell.position.end.offset;
     }
 
     /** @type {Element} */
@@ -908,8 +910,8 @@ export function findOffsetFromPosition(container: Node, offset: number, rootElem
       && (parseStart = node.getAttribute('parse-start')) !== null
       && (parseEnd = node.getAttribute('parse-end')) !== null
     ) {
-      let i = parseInt(parseStart);
-      let j = parseInt(parseEnd);
+      const i = parseInt(parseStart);
+      const j = parseInt(parseEnd);
       if (!Number.isNaN(i) && !Number.isNaN(j)) {
         // reduce to the start or end of math element
         if (node.classList.contains('parse-math')) {
@@ -1048,7 +1050,7 @@ export function findPositionFromOffset(offset: number, rootElement: Element, red
     return null;
   }
 
-  let result = findPositionIn(0, rootElement);
+  const result = findPositionIn(0, rootElement);
 
   if (result instanceof Array && (reduceStart || reduceEnd)) {
     const [resultNode, resultOffset] = result;
@@ -1143,7 +1145,7 @@ function getStyleInPixel(element: HTMLElement, styleName: string) {
   const style = window.getComputedStyle(element);
   const value = style.getPropertyValue(styleName);
 
-  let valueInPixel = parseInt(value.split('px')?.[0]);
+  const valueInPixel = parseInt(value.split('px')?.[0]);
 
   if (isNaN(valueInPixel)) {
     return null;
@@ -1182,4 +1184,16 @@ export function splitLines(text: string, emptyLastLine: boolean = false): string
   }
 
   return result;
+}
+
+export function limitNameLength(name: string, limit: number = 7) {
+  const textEncoder = new TextEncoder();
+  const utf8Bytes = textEncoder.encode(name)
+
+  if (utf8Bytes.length <= limit) {
+    return name;
+  }
+
+  const textDecoder = new TextDecoder();
+  return textDecoder.decode(utf8Bytes).slice(0, limit - 2) + '...';
 }
