@@ -55,7 +55,8 @@
     "glob": "^11.0.2",
     "patch-package": "^8.0.0",
     "react-app-rewired": "^2.2.1",
-    "react-scripts": "5.0.1"
+    "react-scripts": "5.0.1",
+    "typescript-eslint": "^8.32.1"
   },
   "browserslist": {
     "production": [
