@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import { DownloadOutlined, FileAddOutlined, QuestionOutlined, RobotOutlined, SettingOutlined, UploadOutlined } from '@ant-design/icons';
 import type { UploadProps } from 'antd';
@@ -62,6 +62,7 @@ const App: React.FC = () => {
 
   const [docFiles, setDocFiles] = useState<AnnotationDocumentItem[]>([]);
   const [codeFiles, setCodeFiles] = useState<AnnotationDocumentItem[]>([]);
+
   const pendingAnnotations = useRef<{ annotationId: string, targetType: string, range: DocumentRange }[]>([]);
 
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
@@ -70,41 +71,77 @@ const App: React.FC = () => {
 
   const [recentAnnotations, setRecentAnnotations] = useState<Annotation[]>([]);
 
+  const [searchedAnnotations, setSearchedAnnotations] = useState<Annotation[]>([]);
+
   const raiseToRecentAnnotation = (annotation: Annotation) => {
     recentAnnotations.unshift(annotation);
     setRecentAnnotations(recentAnnotations.slice(0, 3));
   }
 
   const searchAnnotations = (keyword: string) => {
+    type SearchResult = { w: number, info?: string };
+    type Pred = (keyword: string, annotation: Annotation) => SearchResult;
+
     const limit = 3;
     let candidate = 0;
 
-    const result: Annotation[] = [];
+    const result: Set<Annotation> = new Set();
+    const resultId: Set<string> = new Set();
 
-    const searchArray = (annotations: Annotation[], refAnnotations?: Annotation[]) => {
+    const categoryIncludesPred: Pred = (keyword, annotation) => {
+      const w = annotation.category.includes(keyword) ? 1 : 0;
+      return { w };
+    }
+
+    const rangeIncludesPred: Pred = (keyword, annotation) => {
+      const ranges = [annotation.docRanges, annotation.codeRanges];
+
+      const w = ranges.some(
+        range => range.some(
+          r => r.content.includes(keyword)
+        )
+      ) ? 1 : 0;
+
+      return { w };
+    }
+
+    const defaultPred: Pred = (keyword, annotation) => {
+      const w = keyword ? 0 : 1;    // allow default only when keyword is not ''
+      return { w };
+    }
+
+    const searchFromAnnotationsWithPred = (annotations: Annotation[], pred: Pred) => {
       for (let i = 0; candidate < limit && i < annotations.length; ++i) {
         const a = annotations[i];
 
-        if (refAnnotations && !refAnnotations.includes(a)) {
-          return;
-        }
-
-        if ((!keyword || a.category.includes(keyword)) && !result.includes(a)) {    // if keyword is '' pick it
-          result.push(a);
+        if (pred(keyword, a).w && !resultId.has(a.id)) {
+          result.add(a);
+          resultId.add(a.id)
           ++candidate;
         }
       }
     }
 
-    searchArray(recentAnnotations, annotations);
-
-    if (candidate >= limit) {
-      return result;
+    const searchFromAnnotations = (annotations: Annotation[]) => {
+      searchFromAnnotationsWithPred(annotations, categoryIncludesPred);
+      searchFromAnnotationsWithPred(annotations, rangeIncludesPred);
+      searchFromAnnotationsWithPred(annotations, defaultPred);
     }
 
-    searchArray(annotations);
+    searchFromAnnotations(recentAnnotations);
 
-    return result;
+    searchFromAnnotations(annotations);       // FIXME update of
+
+    const resultList = Array.from(result);
+
+    // also update the annotation list
+    if (keyword) {
+      setSearchedAnnotations(resultList);
+    } else {
+      setSearchedAnnotations([]);
+    }
+
+    return resultList;
   }
 
   // 历史记录状态
@@ -141,6 +178,10 @@ const App: React.FC = () => {
   const updateAnnotations = (newAnnotations: Annotation[], newCurrentAnnotation: Annotation | null = currentAnnotation) => {
     setAnnotations(newAnnotations);
     setCurrentAnnotation(newCurrentAnnotation);
+
+    const annotationsSet = new Set(newAnnotations.map(a => a.id));
+    setRecentAnnotations(recentAnnotations.filter(a => annotationsSet.has(a.id)));
+
     addToHistory({
       annotations: newAnnotations,
       currentAnnotation: newCurrentAnnotation
@@ -191,27 +232,26 @@ const App: React.FC = () => {
 
   // 删除文件
   const handleDeleteFile = (fileId: string, targetType: string) => {
+    let files: AnnotationDocumentItem[] = [];
+    let setFiles: React.Dispatch<React.SetStateAction<AnnotationDocumentItem[]>> = () => { };
+    let rangesName: 'docRanges' | 'codeRanges' = 'docRanges';
+
     if (targetType === 'doc') {
-      const updatedDocFiles = docFiles.filter(file => file.id !== fileId);
-      setDocFiles(updatedDocFiles);
-
-      // 删除标注中该文档的范围
-      const updatedAnnotations = annotations.map(annotation => ({
-        ...annotation,
-        docRanges: annotation.docRanges.filter(range => range.documentId !== fileId),
-      }));
-      setAnnotations(updatedAnnotations);
+      files = docFiles;
+      setFiles = setDocFiles;
     } else if (targetType === 'code') {
-      const updatedCodeFiles = codeFiles.filter(file => file.id !== fileId);
-      setCodeFiles(updatedCodeFiles);
-
-      // 删除标注中该代码的范围
-      const updatedAnnotations = annotations.map(annotation => ({
-        ...annotation,
-        codeRanges: annotation.codeRanges.filter(range => range.documentId !== fileId),
-      }));
-      setAnnotations(updatedAnnotations);
+      files = codeFiles;
+      setFiles = setCodeFiles;
     }
+
+    const updatedFiles = files.filter(file => file.id !== fileId);
+    setFiles(updatedFiles);
+
+    const updatedAnnotations = annotations.map(annotation => ({
+      ...annotation,
+      [rangesName]: annotation[rangesName].filter(range => range.documentId !== fileId),
+    }));
+    setAnnotations(updatedAnnotations);
   };
 
   // 初始化历史记录
@@ -803,6 +843,42 @@ const App: React.FC = () => {
     showUploadList: false,
   };
 
+  const documentationPanel = useMemo(() => {
+    return (
+      <AnnotationDocumentPanel
+        files={docFiles}
+        onSetFiles={setDocFiles}
+        handleSearchAnnotations={searchAnnotations}
+        targetType='doc'
+        targetTypeName='文档'
+        onUpload={handleCodeUpload}
+        onAddToAnnotation={(range, targetType, annotationId, createNew) => handleAddToAnnotation(range, targetType, annotationId, createNew)}
+        onRevealAnnotationRange={handleRevealRangeFromAnnotations}
+        onRemoveAnnotationRange={(range, targetType, annotationId) => handleRemoveAnnotationRange(range, targetType, annotationId)}
+        onRemoveFile={handleDeleteFile}
+        annotations={annotations}
+      />
+    )
+  }, [docFiles, annotations]);
+
+  const codePanel = useMemo(() => {
+    return (
+      <AnnotationDocumentPanel
+        files={codeFiles}
+        onSetFiles={setCodeFiles}
+        handleSearchAnnotations={searchAnnotations}
+        targetType="code"
+        targetTypeName='代码'
+        onUpload={handleCodeUpload}
+        onAddToAnnotation={(range, targetType, annotationId, createNew) => handleAddToAnnotation(range, targetType, annotationId, createNew)}
+        onRevealAnnotationRange={handleRevealRangeFromAnnotations}
+        onRemoveAnnotationRange={(range, targetType, annotationId) => handleRemoveAnnotationRange(range, targetType, annotationId)}
+        onRemoveFile={handleDeleteFile}
+        annotations={annotations}
+      />
+    )
+  }, [codeFiles, annotations]);
+
   return (
     <Layout className="app-layout">
       <Sider width={56} className="toolbar" theme="light">
@@ -848,34 +924,10 @@ const App: React.FC = () => {
 
       <Layout>
         <Content className="main-content">
-          <AnnotationDocumentPanel
-            files={docFiles}
-            onSetFiles={setDocFiles}
-            handleSearchAnnotations={searchAnnotations}
-            targetType='doc'
-            targetTypeName='文档'
-            onUpload={handleCodeUpload}
-            onAddToAnnotation={(range, targetType, annotationId, createNew) => handleAddToAnnotation(range, targetType, annotationId, createNew)}
-            onRevealAnnotationRange={handleRevealRangeFromAnnotations}
-            onRemoveAnnotationRange={(range, targetType, annotationId) => handleRemoveAnnotationRange(range, targetType, annotationId)}
-            onRemoveFile={handleDeleteFile}
-            annotations={annotations}
-          />
-          <AnnotationDocumentPanel
-            files={codeFiles}
-            onSetFiles={setCodeFiles}
-            handleSearchAnnotations={searchAnnotations}
-            targetType="code"
-            targetTypeName='代码'
-            onUpload={handleCodeUpload}
-            onAddToAnnotation={(range, targetType, annotationId, createNew) => handleAddToAnnotation(range, targetType, annotationId, createNew)}
-            onRevealAnnotationRange={handleRevealRangeFromAnnotations}
-            onRemoveAnnotationRange={(range, targetType, annotationId) => handleRemoveAnnotationRange(range, targetType, annotationId)}
-            onRemoveFile={handleDeleteFile}
-            annotations={annotations}
-          />
+          {documentationPanel}
+          {codePanel}
           <AnnotationPanel
-            annotations={annotations}
+            annotations={searchedAnnotations.length ? searchedAnnotations : annotations}
             currentAnnotation={currentAnnotation}
             onAnnotationCreate={handleCreateAnnotation}
             onAnnotationSelect={(annotation) => { setCurrentAnnotation(annotation); raiseToRecentAnnotation(annotation); }}

@@ -45,7 +45,8 @@ const AnnotationItem = (props: AnnotationItemProps) => {
         outlineColor: props.annotation.color ?? '#000000',
         backgroundColor: props.annotation.color ? computeLighterColor(props.annotation.color) : computeLighterColor('#000000'),
         outlineWidth: props.selected ? '2px' : '1px',
-        outlineStyle: 'solid'
+        outlineStyle: 'solid',
+        boxShadow: props.selected ? `0 0 6px ${props.annotation.color ?? '#000000'}` : 'none'
       }}
     >
       <div className="annotation-header">
